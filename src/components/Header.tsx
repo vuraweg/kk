@@ -5,7 +5,7 @@ import { LogOut, User, Shield } from 'lucide-react';
 import logoImage from '../assets/wihout-gb-logo.png';
 
 const Header: React.FC = () => {
-  const { user, signOut, isAuthenticated, isAdmin } = useAuth();
+  const { user, logout, isAuthenticated, isAdmin } = useAuth();
   const location = useLocation();
 
   const isActive = (path: string) => location.pathname === path;
@@ -28,7 +28,7 @@ const Header: React.FC = () => {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
+      await logout();
     } catch (error) {
       console.error('Error signing out:', error);
     }
