@@ -15,6 +15,7 @@ const SignupPage: React.FC = () => {
   const [success, setSuccess] = useState('');
   const [countdown, setCountdown] = useState(0);
   const [redirectCountdown, setRedirectCountdown] = useState(0);
+  const [autoVerifying, setAutoVerifying] = useState(false);
   const { sendOTP, verifyOTP, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
@@ -130,6 +131,11 @@ const SignupPage: React.FC = () => {
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Prevent form submission if auto-verification is in progress
+    if (autoVerifying) {
+      return;
+    }
+    
     setError('');
     setSuccess('');
     
@@ -183,6 +189,7 @@ const SignupPage: React.FC = () => {
   };
 
   const handleAutoVerifyOTP = async (otpValue: string) => {
+    setAutoVerifying(true);
     setError('');
     setSuccess('');
     setVerifying(true);
@@ -221,6 +228,7 @@ const SignupPage: React.FC = () => {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
+      setAutoVerifying(false);
     }
   };
 
@@ -437,10 +445,15 @@ const SignupPage: React.FC = () => {
                     
                     // Auto-verify when 6 digits are entered
                     if (value.length === 6) {
+                      // Prevent form submission during auto-verification
+                      e.preventDefault();
+                      setAutoVerifying(true);
+                      
+                      // Use a longer delay to ensure state is updated
                       setTimeout(() => {
                         // Call verification function directly without form submission
                         handleAutoVerifyOTP(value);
-                      }, 500); // Small delay for better UX
+                      }, 300); // Reduced delay but enough to prevent form submission
                     }
                   }}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-center text-lg font-mono tracking-widest"
@@ -457,7 +470,7 @@ const SignupPage: React.FC = () => {
               <div>
                 <button
                   type="submit"
-                  disabled={loading || verifying || otp.length !== 6}
+                  disabled={loading || verifying || autoVerifying || otp.length !== 6}
                   className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] ${
                     verifying 
                       ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' 
@@ -482,7 +495,7 @@ const SignupPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleBackToDetails}
-                  disabled={loading || verifying}
+                  disabled={loading || verifying || autoVerifying}
                   className="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
                 >
                   ← Change Details
@@ -491,7 +504,7 @@ const SignupPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleResendOTP}
-                  disabled={loading || verifying || countdown > 0}
+                  disabled={loading || verifying || autoVerifying || countdown > 0}
                   className="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 flex items-center"
                 >
                   {countdown > 0 ? (
