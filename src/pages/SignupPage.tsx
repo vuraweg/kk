@@ -162,11 +162,11 @@ const SignupPage: React.FC = () => {
         setVerifying(false);
         let errorMessage = 'Invalid OTP. Please try again.';
         
-        if (verifyError.message?.includes('expired')) {
+        if (verifyError.code === 'otp_expired' || verifyError.message?.includes('expired')) {
           errorMessage = '⏰ OTP has expired\n\n• OTP is valid for only 5 minutes\n• Request a new OTP to continue\n• Make sure to enter OTP quickly after receiving';
-        } else if (verifyError.message?.includes('invalid') || verifyError.message?.includes('wrong')) {
+        } else if (verifyError.code === 'otp_invalid' || verifyError.message?.includes('invalid') || verifyError.message?.includes('wrong')) {
           errorMessage = '❌ Invalid OTP code\n\n• Double-check the 6-digit code from SMS\n• Make sure you\'re entering the latest OTP\n• Request new OTP if needed';
-        } else if (verifyError.message?.includes('rate limit') || verifyError.message?.includes('Too many')) {
+        } else if (verifyError.code === 'too_many_requests' || verifyError.message?.includes('rate limit') || verifyError.message?.includes('Too many')) {
           errorMessage = '⏰ Too many verification attempts\n\n• Please wait 5-10 minutes\n• Request a new OTP after waiting\n• This is a security measure';
         } else if (verifyError.message) {
           errorMessage = verifyError.message;
@@ -205,11 +205,11 @@ const SignupPage: React.FC = () => {
         setVerifying(false);
         let errorMessage = 'Invalid OTP. Please try again.';
         
-        if (verifyError.message?.includes('expired')) {
+        if (verifyError.code === 'otp_expired' || verifyError.message?.includes('expired')) {
           errorMessage = '⏰ OTP has expired\n\n• OTP is valid for only 5 minutes\n• Request a new OTP to continue\n• Make sure to enter OTP quickly after receiving';
-        } else if (verifyError.message?.includes('invalid') || verifyError.message?.includes('wrong')) {
+        } else if (verifyError.code === 'otp_invalid' || verifyError.message?.includes('invalid') || verifyError.message?.includes('wrong')) {
           errorMessage = '❌ Invalid OTP code\n\n• Double-check the 6-digit code from SMS\n• Make sure you\'re entering the latest OTP\n• Request new OTP if needed';
-        } else if (verifyError.message?.includes('rate limit') || verifyError.message?.includes('Too many')) {
+        } else if (verifyError.code === 'too_many_requests' || verifyError.message?.includes('rate limit') || verifyError.message?.includes('Too many')) {
           errorMessage = '⏰ Too many verification attempts\n\n• Please wait 5-10 minutes\n• Request a new OTP after waiting\n• This is a security measure';
         } else if (verifyError.message) {
           errorMessage = verifyError.message;
