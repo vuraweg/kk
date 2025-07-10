@@ -175,6 +175,48 @@ const LoginPage: React.FC = () => {
     }
   };
 
+  const handleAutoVerifyOTP = async (otpValue: string) => {
+    setError('');
+    setSuccess('');
+    setVerifying(true);
+    setSuccess('🔍 Verifying OTP...\n\nPlease wait while we confirm your code');
+    setLoading(true);
+
+    try {
+      const phoneDigits = phone.replace(/\D/g, '');
+      const { error: verifyError } = await verifyOTP(phoneDigits, otpValue);
+      
+      if (verifyError) {
+        console.error('Verify OTP failed:', verifyError);
+        
+        setVerifying(false);
+        let errorMessage = 'Invalid OTP. Please try again.';
+        
+        if (verifyError.message?.includes('expired')) {
+          errorMessage = '⏰ OTP has expired\n\n• OTP is valid for only 5 minutes\n• Request a new OTP to continue\n• Make sure to enter OTP quickly after receiving';
+        } else if (verifyError.message?.includes('invalid') || verifyError.message?.includes('wrong')) {
+          errorMessage = '❌ Invalid OTP code\n\n• Double-check the 6-digit code from SMS\n• Make sure you\'re entering the latest OTP\n• Request new OTP if needed';
+        } else if (verifyError.message?.includes('rate limit') || verifyError.message?.includes('Too many')) {
+          errorMessage = '⏰ Too many verification attempts\n\n• Please wait 5-10 minutes\n• Request a new OTP after waiting\n• This is a security measure';
+        } else if (verifyError.message) {
+          errorMessage = verifyError.message;
+        }
+        
+        setError(errorMessage);
+      } else {
+        setVerifying(false);
+        setSuccess('✅ Phone number verified successfully!\n\n🎉 Welcome to Primo JobsCracker!\n🚀 Redirecting to dashboard...');
+        // Keep loading state until redirect happens
+      }
+    } catch (err) {
+      console.error('Unexpected error during verify OTP:', err);
+      setVerifying(false);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleResendOTP = async () => {
     if (countdown > 0) return;
     
@@ -360,8 +402,8 @@ const LoginPage: React.FC = () => {
                     // Auto-verify when 6 digits are entered
                     if (value.length === 6) {
                       setTimeout(() => {
-                        // Trigger verification without form submission
-                        handleVerifyOTP(new Event('submit') as any);
+                        // Call verification function directly without form submission
+                        handleAutoVerifyOTP(value);
                       }, 500); // Small delay for better UX
                     }
                   }}
