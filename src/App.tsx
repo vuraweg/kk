@@ -1,10 +1,10 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { SecureAuthProvider, useAuth } from './context/SecureAuthContext';
 import Header from './components/Header';
 import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
+import SecureLoginPage from './pages/SecureLoginPage';
+import SecureSignupPage from './pages/SecureSignupPage';
 import QuestionDetailPage from './pages/QuestionDetailPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
@@ -107,15 +107,15 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
+      <SecureAuthProvider>
         <Router>
           <div className="min-h-screen bg-gray-50">
             <Header />
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/signup" element={<SignupPage />} />
+              <Route path="/login" element={<SecureLoginPage />} />
+              <Route path="/signup" element={<SecureSignupPage />} />
               
               {/* Protected Routes */}
               <Route path="/question/:id" element={
@@ -188,7 +188,7 @@ function App() {
             </Routes>
           </div>
         </Router>
-      </AuthProvider>
+      </SecureAuthProvider>
     </ErrorBoundary>
   );
 }
