@@ -1,5 +1,5 @@
 import { User, AuthResponse } from '../types/auth';
-import { hashPassword, verifyPassword, generateToken, checkRateLimit, recordLoginAttempt, sanitizeForStorage } from '../utils/security';
+import { hashPassword, verifyPassword, generateToken, verifyToken, checkRateLimit, recordLoginAttempt, sanitizeForStorage } from '../utils/security';
 import { validateUsername, validateEmail, validatePassword, sanitizeInput } from '../utils/validation';
 
 // In-memory storage (replace with actual database in production)
@@ -238,7 +238,7 @@ export const authService = {
   // Get user by token
   async getUserByToken(token: string): Promise<AuthResponse> {
     try {
-      const { valid, userId } = require('../utils/security').verifyToken(token);
+      const { valid, userId } = verifyToken(token);
       
       if (!valid || !userId) {
         return {
