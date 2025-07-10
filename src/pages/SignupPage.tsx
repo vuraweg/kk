@@ -11,6 +11,7 @@ const SignupPage: React.FC = () => {
   const [step, setStep] = useState<'details' | 'otp'>('details');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [success, setSuccess] = useState('');
   const [countdown, setCountdown] = useState(0);
   const [redirectCountdown, setRedirectCountdown] = useState(0);
@@ -132,8 +133,15 @@ const SignupPage: React.FC = () => {
     setError('');
     setSuccess('');
     
+    // Show immediate feedback that we're verifying
+    if (otp.length === 6) {
+      setVerifying(true);
+      setSuccess('🔍 Verifying OTP...\n\nPlease wait while we confirm your code');
+    }
+    
     if (otp.length !== 6) {
       setError('Please enter the complete 6-digit OTP');
+      setVerifying(false);
       return;
     }
 
@@ -146,6 +154,7 @@ const SignupPage: React.FC = () => {
       if (verifyError) {
         console.error('Verify OTP failed:', verifyError);
         
+        setVerifying(false);
         let errorMessage = 'Invalid OTP. Please try again.';
         
         if (verifyError.message?.includes('expired')) {
@@ -160,11 +169,13 @@ const SignupPage: React.FC = () => {
         
         setError(errorMessage);
       } else {
+        setVerifying(false);
         setSuccess('🎉 Account created successfully!\n\n✅ Phone number verified\n🚀 Welcome to Primo JobsCracker!\n\nRedirecting to dashboard...');
         setRedirectCountdown(3); // Start countdown on success
       }
     } catch (err) {
       console.error('Unexpected error during verify OTP:', err);
+      setVerifying(false);
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
@@ -380,6 +391,18 @@ const SignupPage: React.FC = () => {
                     const value = e.target.value.replace(/\D/g, '').slice(0, 6);
                     setOtp(value);
                     setError('');
+                    setVerifying(false);
+                    
+                    // Auto-verify when 6 digits are entered
+                    if (value.length === 6) {
+                      setTimeout(() => {
+                        const form = e.target.closest('form');
+                        if (form) {
+                          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+                          form.dispatchEvent(submitEvent);
+                        }
+                      }, 500); // Small delay for better UX
+                    }
                   }}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-center text-lg font-mono tracking-widest"
                   placeholder="123456"
@@ -395,13 +418,17 @@ const SignupPage: React.FC = () => {
               <div>
                 <button
                   type="submit"
-                  disabled={loading || otp.length !== 6}
-                  className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02]"
+                  disabled={loading || verifying || otp.length !== 6}
+                  className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] ${
+                    verifying 
+                      ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' 
+                      : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
+                  }`}
                 >
-                  {loading ? (
+                  {loading || verifying ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      {redirectCountdown > 0 ? 'Redirecting...' : 'Creating Account...'}
+                      {redirectCountdown > 0 ? 'Redirecting...' : verifying ? 'Verifying OTP...' : 'Creating Account...'}
                     </>
                   ) : (
                     <>
@@ -416,7 +443,7 @@ const SignupPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleBackToDetails}
-                  disabled={loading}
+                  disabled={loading || verifying}
                   className="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
                 >
                   ← Change Details
@@ -425,7 +452,7 @@ const SignupPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleResendOTP}
-                  disabled={loading || countdown > 0}
+                  disabled={loading || verifying || countdown > 0}
                   className="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 flex items-center"
                 >
                   {countdown > 0 ? (
