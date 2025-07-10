@@ -199,6 +199,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           };
         }
         
+        if (error.message?.includes('email rate limit exceeded') || error.message?.includes('over_email_send_rate_limit')) {
+          return { 
+            error: { 
+              message: '⏰ Email service temporarily unavailable.\n\n🔧 This is a temporary issue with our email system.\n\n💡 Please try:\n• Wait a few minutes and try again\n• Contact support if the issue persists\n\nYour account may have been created successfully - try signing in.',
+              status: 429,
+              suggestSignIn: true
+            } 
+          };
+        }
+        
         if (error.message?.includes('Password should be at least')) {
           return { 
             error: { 

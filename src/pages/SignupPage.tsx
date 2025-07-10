@@ -103,6 +103,23 @@ const SignupPage: React.FC = () => {
               }
             });
           }, 2000);
+        } else if (signUpError.suggestSignIn) {
+          // Rate limit error - suggest trying to sign in
+          setError(signUpError.message);
+          // Add a "Try Sign In" button or link
+          setTimeout(() => {
+            const shouldTrySignIn = window.confirm(
+              'Would you like to try signing in instead? Your account may have been created successfully.'
+            );
+            if (shouldTrySignIn) {
+              navigate('/login', {
+                state: {
+                  message: 'Please try signing in with your credentials.',
+                  email: email.trim()
+                }
+              });
+            }
+          }, 3000);
         } else {
           setError(signUpError.message || 'Sign up failed. Please try again.');
         }
@@ -155,6 +172,17 @@ const SignupPage: React.FC = () => {
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <div className="text-red-700 text-sm whitespace-pre-line">{error}</div>
+                {error.includes('email rate limit') && (
+                  <div className="mt-3 pt-3 border-t border-red-200">
+                    <Link
+                      to="/login"
+                      state={{ email: email.trim(), message: 'Try signing in - your account may have been created.' }}
+                      className="inline-flex items-center px-3 py-2 border border-red-300 shadow-sm text-sm leading-4 font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                    >
+                      Try Sign In Instead
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 
