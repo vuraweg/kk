@@ -188,60 +188,8 @@ const LoginPage: React.FC = () => {
   };
 
   const handleGoogleLogin = async () => {
-    setError('');
-    setSuccess('');
-    setLoading(true);
-
-    try {
-      // Add strict 4-second timeout for Google login
-      const googleTimeout = setTimeout(() => {
-        setLoading(false);
-        setError('Google sign-in is taking too long. Please try email/password login instead.');
-      }, 4000);
-      
-      console.log('Attempting Google sign in');
-      
-      // Add timeout for Google sign in
-      // Reduced timeout to 5 seconds for Google signin
-      const googleTimeoutId = setTimeout(() => {
-        if (loading) {
-          setLoading(false);
-          setError('Google sign-in is taking too long. Please try email/password sign-in below.');
-        }
-      }, 5000);
-      
-      const { error: googleError } = await signInWithGoogle();
-      
-      clearTimeout(googleTimeout);
-      clearTimeout(googleTimeoutId);
-      
-      if (googleError) {
-        console.error('Google sign-in error:', googleError);
-        
-        let errorMessage = 'Google sign-in failed. Please try email/password sign-in below.';
-        
-        if (googleError.message?.includes('Google OAuth configuration error') || 
-            googleError.message?.includes('origin')) {
-          errorMessage = 'Google sign-in is temporarily unavailable due to configuration issues.\n\nPlease use email/password sign-in below or try again later.';
-        } else if (googleError.message?.includes('popup')) {
-          errorMessage = 'Google sign-in popup was blocked or closed.\n\nPlease allow popups for this site and try again.';
-        } else if (googleError.message?.includes('timed out') || googleError.message?.includes('timeout')) {
-          errorMessage = 'Google sign-in timed out.\n\nPlease check your internet connection and try again.';
-        } else if (googleError.message) {
-          errorMessage = googleError.message;
-        }
-        
-        setError(errorMessage);
-        setLoading(false);
-      } else {
-        setSuccess('Google sign-in successful! Redirecting...');
-        // Keep loading state until redirect happens
-      }
-    } catch (err) {
-      console.error('Unexpected error during Google sign-in:', err);
-      setError('An unexpected error occurred with Google sign-in. Please try email/password sign-in below.');
-      setLoading(false);
-    }
+    // Google sign-in removed - redirect to signup
+    navigate('/signup');
   };
 
   // Demo account helper
@@ -466,28 +414,6 @@ const LoginPage: React.FC = () => {
                     <EyeOff className="h-5 w-5 text-gray-400" />
                   ) : (
                     <Eye className="h-5 w-5 text-gray-400" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <button
-                type="submit"
-                disabled={loading || !email.trim() || !password}
-                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02]"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Signing in...
-                  </>
-                ) : (
-                  'Sign In'
-                )}
-              </button>
-            </div>
-          </form>
           <div className="mt-6 text-center">
             <Link to="/signup" className="text-blue-600 hover:text-blue-700 text-sm font-medium">
               Don't have an account? Sign up

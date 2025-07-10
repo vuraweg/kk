@@ -1,83 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
-import { debounce } from 'lodash'; // Make sure to install lodash if not already installed
-
-// Global rate limiting
-let lastSignupAttempt = 0;
-const GLOBAL_COOLDOWN = 5000; // 5 seconds between ANY signup attempts (reduced)
-
-// Email-specific rate limiting
-const emailAttempts = new Map<string, number>();
-const EMAIL_COOLDOWN = 30000; // 30 seconds between attempts for the same email (reduced)
-
-// Track ongoing signup requests to prevent duplicates
-const ongoingSignups = new Set<string>();
-
-// This is the actual signup logic
-const performSignup = async (email: string, password: string, fullName: string) => {
-  const now = Date.now();
-  const normalizedEmail = email.toLowerCase().trim();
-
-  console.log(`Attempting signup for ${normalizedEmail}`);
-
-  // Check if signup is already in progress for this email
-  if (ongoingSignups.has(normalizedEmail)) {
-    console.log(`Signup already in progress for ${normalizedEmail}`);
-    return { 
-      error: { 
-        message: '⏳ Signup already in progress for this email. Please wait...',
-        status: 409 
-      } 
-    };
-  }
-
-  // Mark this email as having an ongoing signup
-  ongoingSignups.add(normalizedEmail);
-
-  try {
-    // Use login page as redirect destination
-    const redirectTo = `${window.location.origin}/login`;
-
-    const { data, error } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: {
-        emailRedirectTo: redirectTo,
-        data: {
-          full_name: fullName,
-        }
-      }
-    });
-
-    if (error) {
-      console.error('Sign up error:', error);
-      
-      // Handle specific Supabase rate limit errors
-      if (error.message?.includes('email rate limit exceeded') || 
-          error.message?.includes('over_email_send_rate_limit')) {
-        return { 
-          error: { 
-            message: '📧 Email rate limit exceeded from Supabase.\n\n⏰ This happens when too many confirmation emails are sent.\n\n💡 Please try:\n• Wait 2-3 minutes before trying again\n• Use a different email address\n• Contact support if this persists\n\nThis is a Supabase server-side limit, not from our app.',
-            status: 429,
-            isSupabaseRateLimit: true
-          } 
-        };
-      }
-      
-      return { error };
-    }
-
-    console.log('Sign up successful');
-    return { data, error: null };
-  } catch (error) {
-    console.error('Unexpected signup error:', error);
-    return { error };
-  } finally {
-    // Always remove from ongoing signups when done
-    ongoingSignups.delete(normalizedEmail);
-  }
-};
 
 interface User {
   id: string;
@@ -85,7 +8,7 @@ interface User {
   name: string;
   avatar_url?: string;
   isAdmin?: boolean;
-  provider?: 'email' | 'google';
+  provider?: 'email';
 }
 
 interface AuthContextType {
@@ -93,7 +16,6 @@ interface AuthContextType {
   loading: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signInWithGoogle: () => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -226,7 +148,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         name: profile?.full_name || supabaseUser.user_metadata?.full_name || 'User',
         avatar_url: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
         isAdmin,
-        provider: supabaseUser.app_metadata?.provider || 'email'
+        provider: 'email'
       };
       setUser(userProfile);
     } catch (error) {
@@ -245,45 +167,97 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
   
-  // This is the main signup function that will be exposed
   const signUp = async (email: string, password: string, fullName: string) => {
-    const now = Date.now();
     const normalizedEmail = email.toLowerCase().trim();
     
-    console.log(`SignUp called for ${normalizedEmail} at ${new Date(now).toISOString()}`);
-    
-    // Check global cooldown
-    if (now - lastSignupAttempt < GLOBAL_COOLDOWN) {
-      const waitTime = Math.ceil((GLOBAL_COOLDOWN - (now - lastSignupAttempt)) / 1000);
-      console.log(`Global signup cooldown in effect. Please wait ${waitTime} seconds.`);
-      return { 
-        error: { 
-          message: `⏰ Please wait ${waitTime} seconds before trying again.\n\n🔒 This prevents duplicate requests.\n\n💡 Tip: Make sure you only click the signup button once.`,
-          status: 429 
-        } 
-      };
-    }
-    
-    // Check email-specific cooldown
-    const lastEmailAttempt = emailAttempts.get(normalizedEmail) || 0;
-    if (now - lastEmailAttempt < EMAIL_COOLDOWN) {
-      const waitTime = Math.ceil((EMAIL_COOLDOWN - (now - lastEmailAttempt)) / 1000);
+    console.log(`Attempting signup for ${normalizedEmail}`);
+
+    try {
+      // Sign up without email confirmation
+      const { data, error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+          // Disable email confirmation
+          emailRedirectTo: undefined
+        }
+      });
+
+      if (error) {
+        console.error('Sign up error:', error);
+        
+        // Handle specific error types
+        if (error.message?.includes('User already registered')) {
+          return { 
+            error: { 
+              message: '📧 This email is already registered.\n\n💡 Try:\n• Sign in instead\n• Use a different email\n• Reset your password if you forgot it',
+              status: 400 
+            } 
+          };
+        }
+        
+        if (error.message?.includes('Password should be at least')) {
+          return { 
+            error: { 
+              message: '🔒 Password is too weak.\n\n✅ Requirements:\n• At least 6 characters\n• Mix of letters and numbers recommended',
+              status: 400 
+            } 
+          };
+        }
+        
+        if (error.message?.includes('Invalid email')) {
+          return { 
+            error: { 
+              message: '📧 Invalid email format.\n\n💡 Please enter a valid email address.',
+              status: 400 
+            } 
+          };
+        }
+        
+        return { error };
+      }
+
+      console.log('Sign up successful');
       
-      console.log(`Email cooldown in effect for ${normalizedEmail}. Please wait ${waitTime} seconds.`);
+      // If user is created and confirmed automatically, they should be signed in
+      if (data.user && data.session) {
+        console.log('User automatically signed in after signup');
+        return { error: null };
+      }
+      
+      // If user is created but not automatically signed in, try to sign them in
+      if (data.user && !data.session) {
+        console.log('User created, attempting automatic sign in');
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password
+        });
+        
+        if (signInError) {
+          console.error('Auto sign-in failed:', signInError);
+          return { 
+            error: { 
+              message: '✅ Account created successfully!\n\n🔑 Please sign in with your credentials to continue.',
+              status: 201,
+              isSuccess: true
+            } 
+          };
+        }
+      }
+      
+      return { error: null };
+    } catch (error) {
+      console.error('Unexpected signup error:', error);
       return { 
         error: { 
-          message: `⏰ Please wait ${waitTime} seconds before trying this email again.\n\n💡 You can:\n• Use a different email address\n• Try Google sign-in instead\n• Wait for the cooldown to expire`,
-          status: 429 
+          message: '❌ An unexpected error occurred.\n\n🔄 Please try again in a moment.',
+          status: 500 
         } 
       };
     }
-    
-    // Update timestamps before performing signup
-    lastSignupAttempt = now;
-    emailAttempts.set(normalizedEmail, now);
-    
-    // Perform the actual signup
-    return await performSignup(email, password, fullName);
   };
 
   const signIn = async (email: string, password: string) => {
@@ -293,12 +267,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Sign in error:', error);
     }
     setLoading(false);
-    return { error };
-  };
-
-  const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
-    if (error) console.error('Google sign in error:', error);
     return { error };
   };
 
@@ -312,7 +280,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading: loading || initializing,
     signUp,
     signIn,
-    signInWithGoogle,
     signOut,
     isAuthenticated: !!user,
     isAdmin: !!user?.isAdmin
