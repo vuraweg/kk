@@ -74,9 +74,7 @@ const LoginPage: React.FC = () => {
     return digits.length === 10 && /^[6-9]/.test(digits);
   };
 
-  const handleSendOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleSendOTP = async () => {
     
     setError('');
     setSuccess('');
@@ -341,7 +339,7 @@ const LoginPage: React.FC = () => {
           )}
 
           {step === 'phone' ? (
-            <form className="space-y-6" onSubmit={handleSendOTP}>
+            <div className="space-y-6">
               <div>
                 <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
                   Mobile Number
@@ -373,14 +371,13 @@ const LoginPage: React.FC = () => {
 
               <div>
                 <button
-                  type="submit"
                   disabled={loading || !validatePhoneNumber(phone)}
                   className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02]"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     if (!loading && validatePhoneNumber(phone)) {
-                      handleSendOTP(e);
+                      handleSendOTP();
                     }
                   }}
                 >
@@ -397,7 +394,7 @@ const LoginPage: React.FC = () => {
                   )}
                 </button>
               </div>
-            </form>
+            </div>
           ) : (
             <form className="space-y-6" onSubmit={handleVerifyOTP}>
               <div>
