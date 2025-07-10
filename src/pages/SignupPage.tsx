@@ -396,11 +396,8 @@ const SignupPage: React.FC = () => {
                     // Auto-verify when 6 digits are entered
                     if (value.length === 6) {
                       setTimeout(() => {
-                        const form = e.target.closest('form');
-                        if (form) {
-                          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-                          form.dispatchEvent(submitEvent);
-                        }
+                        // Trigger verification without form submission
+                        handleVerifyOTP(new Event('submit') as any);
                       }, 500); // Small delay for better UX
                     }
                   }}
