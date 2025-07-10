@@ -414,6 +414,11 @@ const LoginPage: React.FC = () => {
                     <EyeOff className="h-5 w-5 text-gray-400" />
                   ) : (
                     <Eye className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
           <div className="mt-6 text-center">
             <Link to="/signup" className="text-blue-600 hover:text-blue-700 text-sm font-medium">
               Don't have an account? Sign up
