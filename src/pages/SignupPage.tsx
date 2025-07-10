@@ -16,12 +16,14 @@ const SignupPage: React.FC = () => {
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
-  // Add these states to your SignupPage component
+  // Prevent double submissions
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastSubmitTime, setLastSubmitTime] = useState(0);
   const [rateLimitInfo, setRateLimitInfo] = useState<{
     isActive: boolean;
     timeRemaining: number;
     message: string;
+    isSupabaseLimit: boolean;
   }>({ isActive: false, timeRemaining: 0, message: '' });
 
   // Effect for success redirect countdown
@@ -61,22 +63,29 @@ const SignupPage: React.FC = () => {
 
   // Helper function to parse rate limit error and extract time
   const parseRateLimitError = (errorMessage: string) => {
-    // Extract time from various formats in the error message
-    const timeMatch = errorMessage.match(/(\d+)m\s*(\d+)s|(\d+)\s*seconds?/);
-    if (timeMatch) {
-      if (timeMatch[1] && timeMatch[2]) {
-        // Format: "2m 30s"
-        return parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
-      } else if (timeMatch[3]) {
-        // Format: "60 seconds"
-        return parseInt(timeMatch[3]);
-      }
+    // For Supabase rate limits, use a longer default time
+    if (errorMessage.includes('Supabase') || errorMessage.includes('over_email_send_rate_limit')) {
+      return 120; // 2 minutes for Supabase rate limits
     }
-    return 60; // Default fallback
+    
+    // Extract time from error message
+    const timeMatch = errorMessage.match(/(\d+)\s*seconds?/);
+    if (timeMatch) {
+      return parseInt(timeMatch[1]);
+    }
+    return 30; // Default fallback
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const now = Date.now();
+    
+    // Prevent rapid double-clicks (within 2 seconds)
+    if (now - lastSubmitTime < 2000) {
+      setError('⚠️ Please wait a moment before submitting again.');
+      return;
+    }
     
     // Prevent submission during cooldown
     if (rateLimitInfo.isActive) {
@@ -89,12 +98,14 @@ const SignupPage: React.FC = () => {
     
     // Prevent multiple submissions
     if (isSubmitting) {
-      setError('A sign-up request is already in progress.');
+      setError('⏳ Sign-up request is already in progress. Please wait...');
       return;
     }
     
+    // Clear previous messages
     setError('');
     setSuccess('');
+    setLastSubmitTime(now);
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -114,6 +125,8 @@ const SignupPage: React.FC = () => {
     setLoading(true);
     setIsSubmitting(true);
 
+    console.log('Starting signup process for:', email.trim());
+
     try {
       const { error } = await signUp(email.trim(), password, fullName.trim());
 
@@ -121,12 +134,17 @@ const SignupPage: React.FC = () => {
         // Handle rate limit errors with smooth countdown
         if (error.status === 429 || error.message.includes('rate limit') || error.message.includes('Too many')) {
           const waitTime = parseRateLimitError(error.message);
+          const isSupabaseLimit = error.isSupabaseRateLimit || error.message.includes('Supabase');
           
           setRateLimitInfo({
             isActive: true,
             timeRemaining: waitTime,
-            message: error.message
+            message: error.message,
+            isSupabaseLimit
           });
+          setError(error.message);
+        } else if (error.status === 409) {
+          // Duplicate request error
           setError(error.message);
         } else {
           setError(`Sign up failed: ${error.message}`);
@@ -186,19 +204,26 @@ const SignupPage: React.FC = () => {
                         Time remaining: {Math.floor(rateLimitInfo.timeRemaining / 60)}m {rateLimitInfo.timeRemaining % 60}s
                       </span>
                       <div className="text-xs text-red-600">
-                        {Math.round((1 - rateLimitInfo.timeRemaining / parseRateLimitError(rateLimitInfo.message)) * 100)}%
+                        {Math.round((1 - rateLimitInfo.timeRemaining / parseRateLimitError(rateLimitInfo.message || '')) * 100)}%
                       </div>
                     </div>
                     <div className="w-full bg-red-200 rounded-full h-2">
                       <div 
-                        className="bg-red-600 h-2 rounded-full transition-all duration-1000 ease-linear"
+                        className={`h-2 rounded-full transition-all duration-1000 ease-linear ${
+                          rateLimitInfo.isSupabaseLimit ? 'bg-orange-600' : 'bg-red-600'
+                        }`}
                         style={{ 
-                          width: `${Math.max(0, (1 - rateLimitInfo.timeRemaining / parseRateLimitError(rateLimitInfo.message)) * 100)}%` 
+                          width: `${Math.max(0, (1 - rateLimitInfo.timeRemaining / parseRateLimitError(rateLimitInfo.message || '')) * 100)}%` 
                         }}
                       ></div>
                     </div>
-                    <div className="mt-2 text-xs text-red-600">
-                      The form will be automatically enabled when the cooldown expires.
+                    <div className="mt-2 text-xs text-red-600 space-y-1">
+                      <div>The form will be automatically enabled when the cooldown expires.</div>
+                      {rateLimitInfo.isSupabaseLimit && (
+                        <div className="text-orange-600 font-medium">
+                          ⚠️ This is a Supabase server limit - not from our app
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -319,7 +344,8 @@ const SignupPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading || isSubmitting || rateLimitInfo.isActive || !email.trim() || !password || !fullName.trim() || password !== confirmPassword}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors select-none"
+                style={{ userSelect: 'none' }} // Prevent text selection on button
               >
                 {loading ? (
                   <>

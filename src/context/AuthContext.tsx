@@ -5,15 +5,14 @@ import { debounce } from 'lodash'; // Make sure to install lodash if not already
 
 // Global rate limiting
 let lastSignupAttempt = 0;
-const GLOBAL_COOLDOWN = 15000; // 15 seconds between ANY signup attempts
+const GLOBAL_COOLDOWN = 5000; // 5 seconds between ANY signup attempts (reduced)
 
 // Email-specific rate limiting
 const emailAttempts = new Map<string, number>();
-const EMAIL_COOLDOWN = 90000; // 90 seconds (1.5 minutes) between attempts for the same email
+const EMAIL_COOLDOWN = 30000; // 30 seconds between attempts for the same email (reduced)
 
-// Track attempt counts for progressive cooldowns
-const attemptCounts = new Map<string, number>();
-const ATTEMPT_RESET_TIME = 300000; // 5 minutes to reset attempt count
+// Track ongoing signup requests to prevent duplicates
+const ongoingSignups = new Set<string>();
 
 // This is the actual signup logic
 const performSignup = async (email: string, password: string, fullName: string) => {
@@ -21,6 +20,20 @@ const performSignup = async (email: string, password: string, fullName: string) 
   const normalizedEmail = email.toLowerCase().trim();
 
   console.log(`Attempting signup for ${normalizedEmail}`);
+
+  // Check if signup is already in progress for this email
+  if (ongoingSignups.has(normalizedEmail)) {
+    console.log(`Signup already in progress for ${normalizedEmail}`);
+    return { 
+      error: { 
+        message: '⏳ Signup already in progress for this email. Please wait...',
+        status: 409 
+      } 
+    };
+  }
+
+  // Mark this email as having an ongoing signup
+  ongoingSignups.add(normalizedEmail);
 
   try {
     // Use login page as redirect destination
@@ -39,6 +52,19 @@ const performSignup = async (email: string, password: string, fullName: string) 
 
     if (error) {
       console.error('Sign up error:', error);
+      
+      // Handle specific Supabase rate limit errors
+      if (error.message?.includes('email rate limit exceeded') || 
+          error.message?.includes('over_email_send_rate_limit')) {
+        return { 
+          error: { 
+            message: '📧 Email rate limit exceeded from Supabase.\n\n⏰ This happens when too many confirmation emails are sent.\n\n💡 Please try:\n• Wait 2-3 minutes before trying again\n• Use a different email address\n• Contact support if this persists\n\nThis is a Supabase server-side limit, not from our app.',
+            status: 429,
+            isSupabaseRateLimit: true
+          } 
+        };
+      }
+      
       return { error };
     }
 
@@ -47,6 +73,9 @@ const performSignup = async (email: string, password: string, fullName: string) 
   } catch (error) {
     console.error('Unexpected signup error:', error);
     return { error };
+  } finally {
+    // Always remove from ongoing signups when done
+    ongoingSignups.delete(normalizedEmail);
   }
 };
 
@@ -221,24 +250,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const now = Date.now();
     const normalizedEmail = email.toLowerCase().trim();
     
-    // Get attempt count for this email
-    const attemptKey = `attempts_${normalizedEmail}`;
-    const lastAttemptTime = emailAttempts.get(normalizedEmail) || 0;
-    let attemptCount = attemptCounts.get(attemptKey) || 0;
-    
-    // Reset attempt count if enough time has passed
-    if (now - lastAttemptTime > ATTEMPT_RESET_TIME) {
-      attemptCount = 0;
-      attemptCounts.set(attemptKey, 0);
-    }
-    
-    // Progressive cooldown based on attempt count
-    let emailCooldown = EMAIL_COOLDOWN;
-    if (attemptCount >= 3) {
-      emailCooldown = EMAIL_COOLDOWN * 2; // 3 minutes for 3+ attempts
-    } else if (attemptCount >= 2) {
-      emailCooldown = EMAIL_COOLDOWN * 1.5; // 2.25 minutes for 2+ attempts
-    }
+    console.log(`SignUp called for ${normalizedEmail} at ${new Date(now).toISOString()}`);
     
     // Check global cooldown
     if (now - lastSignupAttempt < GLOBAL_COOLDOWN) {
@@ -246,56 +258,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log(`Global signup cooldown in effect. Please wait ${waitTime} seconds.`);
       return { 
         error: { 
-          message: `⏰ Please wait ${waitTime} seconds before trying again.\n\n🔒 This helps protect against spam and ensures system stability.\n\n💡 Tip: Double-check your email and password while waiting.`,
+          message: `⏰ Please wait ${waitTime} seconds before trying again.\n\n🔒 This prevents duplicate requests.\n\n💡 Tip: Make sure you only click the signup button once.`,
           status: 429 
         } 
       };
     }
     
     // Check email-specific cooldown
-    if (now - lastAttemptTime < emailCooldown) {
-      const waitTime = Math.ceil((emailCooldown - (now - lastAttemptTime)) / 1000);
-      const minutes = Math.floor(waitTime / 60);
-      const seconds = waitTime % 60;
-      const timeString = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+    const lastEmailAttempt = emailAttempts.get(normalizedEmail) || 0;
+    if (now - lastEmailAttempt < EMAIL_COOLDOWN) {
+      const waitTime = Math.ceil((EMAIL_COOLDOWN - (now - lastEmailAttempt)) / 1000);
       
       console.log(`Email cooldown in effect for ${normalizedEmail}. Please wait ${waitTime} seconds.`);
-      
-      let message = `⏰ Too many signup attempts with this email.\n\n`;
-      message += `🕒 Please wait ${timeString} before trying again.\n\n`;
-      
-      if (attemptCount >= 2) {
-        message += `🔄 Multiple attempts detected - extended cooldown applied.\n\n`;
-      }
-      
-      message += `💡 While waiting, you can:\n`;
-      message += `• Double-check your email address\n`;
-      message += `• Verify your password meets requirements\n`;
-      message += `• Try using a different email address\n`;
-      message += `• Use the "Sign in with Google" option instead`;
-      
       return { 
         error: { 
-          message: message,
+          message: `⏰ Please wait ${waitTime} seconds before trying this email again.\n\n💡 You can:\n• Use a different email address\n• Try Google sign-in instead\n• Wait for the cooldown to expire`,
           status: 429 
         } 
       };
     }
     
-    // Update timestamps and attempt count before performing signup
+    // Update timestamps before performing signup
     lastSignupAttempt = now;
     emailAttempts.set(normalizedEmail, now);
-    attemptCounts.set(attemptKey, attemptCount + 1);
     
     // Perform the actual signup
-    const result = await performSignup(email, password, fullName);
-    
-    // If signup was successful, reset attempt count for this email
-    if (!result.error) {
-      attemptCounts.set(attemptKey, 0);
-    }
-    
-    return result;
+    return await performSignup(email, password, fullName);
   };
 
   const signIn = async (email: string, password: string) => {
