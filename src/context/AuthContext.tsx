@@ -5,11 +5,15 @@ import { debounce } from 'lodash'; // Make sure to install lodash if not already
 
 // Global rate limiting
 let lastSignupAttempt = 0;
-const GLOBAL_COOLDOWN = 30000; // 30 seconds between ANY signup attempts
+const GLOBAL_COOLDOWN = 15000; // 15 seconds between ANY signup attempts
 
 // Email-specific rate limiting
 const emailAttempts = new Map<string, number>();
-const EMAIL_COOLDOWN = 120000; // 120 seconds (2 minutes) between attempts for the same email
+const EMAIL_COOLDOWN = 90000; // 90 seconds (1.5 minutes) between attempts for the same email
+
+// Track attempt counts for progressive cooldowns
+const attemptCounts = new Map<string, number>();
+const ATTEMPT_RESET_TIME = 300000; // 5 minutes to reset attempt count
 
 // This is the actual signup logic
 const performSignup = async (email: string, password: string, fullName: string) => {
@@ -217,37 +221,81 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const now = Date.now();
     const normalizedEmail = email.toLowerCase().trim();
     
+    // Get attempt count for this email
+    const attemptKey = `attempts_${normalizedEmail}`;
+    const lastAttemptTime = emailAttempts.get(normalizedEmail) || 0;
+    let attemptCount = attemptCounts.get(attemptKey) || 0;
+    
+    // Reset attempt count if enough time has passed
+    if (now - lastAttemptTime > ATTEMPT_RESET_TIME) {
+      attemptCount = 0;
+      attemptCounts.set(attemptKey, 0);
+    }
+    
+    // Progressive cooldown based on attempt count
+    let emailCooldown = EMAIL_COOLDOWN;
+    if (attemptCount >= 3) {
+      emailCooldown = EMAIL_COOLDOWN * 2; // 3 minutes for 3+ attempts
+    } else if (attemptCount >= 2) {
+      emailCooldown = EMAIL_COOLDOWN * 1.5; // 2.25 minutes for 2+ attempts
+    }
+    
     // Check global cooldown
     if (now - lastSignupAttempt < GLOBAL_COOLDOWN) {
       const waitTime = Math.ceil((GLOBAL_COOLDOWN - (now - lastSignupAttempt)) / 1000);
       console.log(`Global signup cooldown in effect. Please wait ${waitTime} seconds.`);
       return { 
         error: { 
-          message: `Please wait ${waitTime} seconds before trying again.`,
+          message: `⏰ Please wait ${waitTime} seconds before trying again.\n\n🔒 This helps protect against spam and ensures system stability.\n\n💡 Tip: Double-check your email and password while waiting.`,
           status: 429 
         } 
       };
     }
     
     // Check email-specific cooldown
-    const lastEmailAttempt = emailAttempts.get(normalizedEmail) || 0;
-    if (now - lastEmailAttempt < EMAIL_COOLDOWN) {
-      const waitTime = Math.ceil((EMAIL_COOLDOWN - (now - lastEmailAttempt)) / 1000);
+    if (now - lastAttemptTime < emailCooldown) {
+      const waitTime = Math.ceil((emailCooldown - (now - lastAttemptTime)) / 1000);
+      const minutes = Math.floor(waitTime / 60);
+      const seconds = waitTime % 60;
+      const timeString = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+      
       console.log(`Email cooldown in effect for ${normalizedEmail}. Please wait ${waitTime} seconds.`);
+      
+      let message = `⏰ Too many signup attempts with this email.\n\n`;
+      message += `🕒 Please wait ${timeString} before trying again.\n\n`;
+      
+      if (attemptCount >= 2) {
+        message += `🔄 Multiple attempts detected - extended cooldown applied.\n\n`;
+      }
+      
+      message += `💡 While waiting, you can:\n`;
+      message += `• Double-check your email address\n`;
+      message += `• Verify your password meets requirements\n`;
+      message += `• Try using a different email address\n`;
+      message += `• Use the "Sign in with Google" option instead`;
+      
       return { 
         error: { 
-          message: `Too many attempts with this email. Please wait ${waitTime} seconds or try a different email.`,
+          message: message,
           status: 429 
         } 
       };
     }
     
-    // Update timestamps before performing signup
+    // Update timestamps and attempt count before performing signup
     lastSignupAttempt = now;
     emailAttempts.set(normalizedEmail, now);
+    attemptCounts.set(attemptKey, attemptCount + 1);
     
     // Perform the actual signup
-    return await performSignup(email, password, fullName);
+    const result = await performSignup(email, password, fullName);
+    
+    // If signup was successful, reset attempt count for this email
+    if (!result.error) {
+      attemptCounts.set(attemptKey, 0);
+    }
+    
+    return result;
   };
 
   const signIn = async (email: string, password: string) => {

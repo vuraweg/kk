@@ -18,8 +18,11 @@ const SignupPage: React.FC = () => {
 
   // Add these states to your SignupPage component
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [cooldownTime, setCooldownTime] = useState(0);
-  const [cooldownTimer, setCooldownTimer] = useState<NodeJS.Timeout | null>(null);
+  const [rateLimitInfo, setRateLimitInfo] = useState<{
+    isActive: boolean;
+    timeRemaining: number;
+    message: string;
+  }>({ isActive: false, timeRemaining: 0, message: '' });
 
   // Effect for success redirect countdown
   useEffect(() => {
@@ -39,28 +42,48 @@ const SignupPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [redirectCountdown, success, navigate, email]);
 
-  // Add this effect to handle the cooldown timer
+  // Effect to handle rate limit countdown
   useEffect(() => {
-    if (cooldownTime > 0) {
+    if (rateLimitInfo.isActive && rateLimitInfo.timeRemaining > 0) {
       const timer = setTimeout(() => {
-        setCooldownTime(prev => Math.max(0, prev - 1));
+        setRateLimitInfo(prev => ({
+          ...prev,
+          timeRemaining: Math.max(0, prev.timeRemaining - 1)
+        }));
       }, 1000);
       
-      setCooldownTimer(timer);
       return () => clearTimeout(timer);
-    } else if (cooldownTimer) {
-      clearTimeout(cooldownTimer);
-      setCooldownTimer(null);
+    } else if (rateLimitInfo.isActive && rateLimitInfo.timeRemaining === 0) {
+      setRateLimitInfo({ isActive: false, timeRemaining: 0, message: '' });
+      setError(''); // Clear any rate limit error
     }
-  }, [cooldownTime]);
+  }, [rateLimitInfo]);
 
-  // Update your handleSubmit function
+  // Helper function to parse rate limit error and extract time
+  const parseRateLimitError = (errorMessage: string) => {
+    // Extract time from various formats in the error message
+    const timeMatch = errorMessage.match(/(\d+)m\s*(\d+)s|(\d+)\s*seconds?/);
+    if (timeMatch) {
+      if (timeMatch[1] && timeMatch[2]) {
+        // Format: "2m 30s"
+        return parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
+      } else if (timeMatch[3]) {
+        // Format: "60 seconds"
+        return parseInt(timeMatch[3]);
+      }
+    }
+    return 60; // Default fallback
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Prevent submission during cooldown
-    if (cooldownTime > 0) {
-      setError(`Please wait ${cooldownTime} seconds before trying again.`);
+    if (rateLimitInfo.isActive) {
+      const minutes = Math.floor(rateLimitInfo.timeRemaining / 60);
+      const seconds = rateLimitInfo.timeRemaining % 60;
+      const timeString = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+      setError(`⏰ Please wait ${timeString} before trying again.`);
       return;
     }
     
@@ -95,14 +118,16 @@ const SignupPage: React.FC = () => {
       const { error } = await signUp(email.trim(), password, fullName.trim());
 
       if (error) {
-        // Check for rate limit errors
+        // Handle rate limit errors with smooth countdown
         if (error.status === 429 || error.message.includes('rate limit') || error.message.includes('Too many')) {
-          // Extract cooldown time from error message if available
-          const timeMatch = error.message.match(/wait (\d+) second/);
-          const waitTime = timeMatch ? parseInt(timeMatch[1], 10) : 60;
+          const waitTime = parseRateLimitError(error.message);
           
-          setCooldownTime(waitTime);
-          setError(`Rate limit reached. Please wait ${waitTime} seconds before trying again.`);
+          setRateLimitInfo({
+            isActive: true,
+            timeRemaining: waitTime,
+            message: error.message
+          });
+          setError(error.message);
         } else {
           setError(`Sign up failed: ${error.message}`);
         }
@@ -154,6 +179,29 @@ const SignupPage: React.FC = () => {
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
                 <div className="whitespace-pre-line text-sm">{error}</div>
+                {rateLimitInfo.isActive && (
+                  <div className="mt-3 pt-3 border-t border-red-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-red-800 font-medium text-sm">
+                        Time remaining: {Math.floor(rateLimitInfo.timeRemaining / 60)}m {rateLimitInfo.timeRemaining % 60}s
+                      </span>
+                      <div className="text-xs text-red-600">
+                        {Math.round((1 - rateLimitInfo.timeRemaining / parseRateLimitError(rateLimitInfo.message)) * 100)}%
+                      </div>
+                    </div>
+                    <div className="w-full bg-red-200 rounded-full h-2">
+                      <div 
+                        className="bg-red-600 h-2 rounded-full transition-all duration-1000 ease-linear"
+                        style={{ 
+                          width: `${Math.max(0, (1 - rateLimitInfo.timeRemaining / parseRateLimitError(rateLimitInfo.message)) * 100)}%` 
+                        }}
+                      ></div>
+                    </div>
+                    <div className="mt-2 text-xs text-red-600">
+                      The form will be automatically enabled when the cooldown expires.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -270,7 +318,7 @@ const SignupPage: React.FC = () => {
             <div>
               <button
                 type="submit"
-                disabled={loading || isSubmitting || cooldownTime > 0 || !email.trim() || !password || !fullName.trim() || password !== confirmPassword}
+                disabled={loading || isSubmitting || rateLimitInfo.isActive || !email.trim() || !password || !fullName.trim() || password !== confirmPassword}
                 className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {loading ? (
@@ -278,7 +326,11 @@ const SignupPage: React.FC = () => {
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     {redirectCountdown > 0 ? 'Redirecting...' : 'Creating Account...'}
                   </>
-                ) : cooldownTime > 0 ? `Try again in ${cooldownTime}s` : 'Create Account'}
+                ) : rateLimitInfo.isActive ? (
+                  `Try again in ${Math.floor(rateLimitInfo.timeRemaining / 60)}m ${rateLimitInfo.timeRemaining % 60}s`
+                ) : (
+                  'Create Account'
+                )}
               </button>
             </div>
           </form>
