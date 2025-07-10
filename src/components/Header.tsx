@@ -1,11 +1,11 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/SecureAuthContext';
+import { useAuth } from '../context/AuthContext';
 import { LogOut, User, Shield } from 'lucide-react';
 import logoImage from '../assets/wihout-gb-logo.png';
 
 const Header: React.FC = () => {
-  const { user, logout, isAuthenticated, isAdmin } = useAuth();
+  const { user, signOut, isAuthenticated, isAdmin } = useAuth();
   const location = useLocation();
 
   const isActive = (path: string) => location.pathname === path;
@@ -28,7 +28,7 @@ const Header: React.FC = () => {
 
   const handleSignOut = async () => {
     try {
-      await logout();
+      await signOut();
     } catch (error) {
       console.error('Error signing out:', error);
     }

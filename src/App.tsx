@@ -1,10 +1,10 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { SecureAuthProvider, useAuth } from './context/SecureAuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Header from './components/Header';
 import HomePage from './pages/HomePage';
-import SecureLoginPage from './pages/SecureLoginPage';
-import SecureSignupPage from './pages/SecureSignupPage';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
 import QuestionDetailPage from './pages/QuestionDetailPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
@@ -83,8 +83,6 @@ const LoadingScreen = () => (
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   
-  // console.log('ProtectedRoute: isAuthenticated:', isAuthenticated, 'loading:', loading);
-  
   if (loading) {
     return <LoadingScreen />;
   }
@@ -94,8 +92,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isAdmin, loading } = useAuth();
-  
-  // console.log('AdminRoute: isAuthenticated:', isAuthenticated, 'isAdmin:', isAdmin, 'loading:', loading);
   
   if (loading) {
     return <LoadingScreen />;
@@ -107,15 +103,15 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 function App() {
   return (
     <ErrorBoundary>
-      <SecureAuthProvider>
+      <AuthProvider>
         <Router>
           <div className="min-h-screen bg-gray-50">
             <Header />
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<SecureLoginPage />} />
-              <Route path="/signup" element={<SecureSignupPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/signup" element={<SignupPage />} />
               
               {/* Protected Routes */}
               <Route path="/question/:id" element={
@@ -188,7 +184,7 @@ function App() {
             </Routes>
           </div>
         </Router>
-      </SecureAuthProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

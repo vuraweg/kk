@@ -1,21 +1,15 @@
-// DEPRECATED: This file is kept for reference but should not be used
-// Use SecureAuthContext instead for the new secure authentication system
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
-import { debounce } from 'lodash'; // Make sure to install lodash if not already installed
+import { debounce } from 'lodash';
 
 // Global rate limiting
 let lastSignupAttempt = 0;
-const GLOBAL_COOLDOWN = 5000; // 5 seconds between ANY signup attempts (reduced)
+const GLOBAL_COOLDOWN = 10000; // 10 seconds between ANY signup attempts
 
 // Email-specific rate limiting
 const emailAttempts = new Map<string, number>();
-const EMAIL_COOLDOWN = 30000; // 30 seconds between attempts for the same email (reduced)
-
-// Track ongoing signup requests to prevent duplicates
-const ongoingSignups = new Set<string>();
+const EMAIL_COOLDOWN = 60000; // 60 seconds (1 minute) between attempts for the same email
 
 // This is the actual signup logic
 const performSignup = async (email: string, password: string, fullName: string) => {
@@ -23,20 +17,6 @@ const performSignup = async (email: string, password: string, fullName: string) 
   const normalizedEmail = email.toLowerCase().trim();
 
   console.log(`Attempting signup for ${normalizedEmail}`);
-
-  // Check if signup is already in progress for this email
-  if (ongoingSignups.has(normalizedEmail)) {
-    console.log(`Signup already in progress for ${normalizedEmail}`);
-    return { 
-      error: { 
-        message: '⏳ Signup already in progress for this email. Please wait...',
-        status: 409 
-      } 
-    };
-  }
-
-  // Mark this email as having an ongoing signup
-  ongoingSignups.add(normalizedEmail);
 
   try {
     // Use login page as redirect destination
@@ -55,19 +35,6 @@ const performSignup = async (email: string, password: string, fullName: string) 
 
     if (error) {
       console.error('Sign up error:', error);
-      
-      // Handle specific Supabase rate limit errors
-      if (error.message?.includes('email rate limit exceeded') || 
-          error.message?.includes('over_email_send_rate_limit')) {
-        return { 
-          error: { 
-            message: '📧 Email rate limit exceeded from Supabase.\n\n⏰ This happens when too many confirmation emails are sent.\n\n💡 Please try:\n• Wait 2-3 minutes before trying again\n• Use a different email address\n• Contact support if this persists\n\nThis is a Supabase server-side limit, not from our app.',
-            status: 429,
-            isSupabaseRateLimit: true
-          } 
-        };
-      }
-      
       return { error };
     }
 
@@ -76,9 +43,6 @@ const performSignup = async (email: string, password: string, fullName: string) 
   } catch (error) {
     console.error('Unexpected signup error:', error);
     return { error };
-  } finally {
-    // Always remove from ongoing signups when done
-    ongoingSignups.delete(normalizedEmail);
   }
 };
 
@@ -221,12 +185,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw error;
       }
 
-      const isAdmin = profile?.role === 'admin' || supabaseUser.email === 'your-admin-email@gmail.com';
+      // Check if user is admin based on email
+      const adminEmails = ['admin@primojobs.com', 'your-admin-email@gmail.com', 'demo@primojobs.com', 'primoboostai@gmail.com'];
+      const isAdmin = adminEmails.includes(supabaseUser.email || '');
 
       const userProfile: User = {
         id: supabaseUser.id,
         email: supabaseUser.email || '',
-        name: profile?.full_name || supabaseUser.user_metadata?.full_name || 'User',
+        name: profile?.name || supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || 'User',
         avatar_url: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
         isAdmin,
         provider: supabaseUser.app_metadata?.provider || 'email'
@@ -253,15 +219,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const now = Date.now();
     const normalizedEmail = email.toLowerCase().trim();
     
-    console.log(`SignUp called for ${normalizedEmail} at ${new Date(now).toISOString()}`);
-    
     // Check global cooldown
     if (now - lastSignupAttempt < GLOBAL_COOLDOWN) {
       const waitTime = Math.ceil((GLOBAL_COOLDOWN - (now - lastSignupAttempt)) / 1000);
       console.log(`Global signup cooldown in effect. Please wait ${waitTime} seconds.`);
       return { 
         error: { 
-          message: `⏰ Please wait ${waitTime} seconds before trying again.\n\n🔒 This prevents duplicate requests.\n\n💡 Tip: Make sure you only click the signup button once.`,
+          message: `Please wait ${waitTime} seconds before trying again.`,
           status: 429 
         } 
       };
@@ -271,11 +235,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const lastEmailAttempt = emailAttempts.get(normalizedEmail) || 0;
     if (now - lastEmailAttempt < EMAIL_COOLDOWN) {
       const waitTime = Math.ceil((EMAIL_COOLDOWN - (now - lastEmailAttempt)) / 1000);
-      
       console.log(`Email cooldown in effect for ${normalizedEmail}. Please wait ${waitTime} seconds.`);
       return { 
         error: { 
-          message: `⏰ Please wait ${waitTime} seconds before trying this email again.\n\n💡 You can:\n• Use a different email address\n• Try Google sign-in instead\n• Wait for the cooldown to expire`,
+          message: `Too many attempts with this email. Please wait ${waitTime} seconds or try a different email.`,
           status: 429 
         } 
       };
@@ -300,7 +263,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+    const { error } = await supabase.auth.signInWithOAuth({ 
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/login`
+      }
+    });
     if (error) console.error('Google sign in error:', error);
     return { error };
   };
