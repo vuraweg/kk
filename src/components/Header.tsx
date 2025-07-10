@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/SecureAuthContext';
 import { LogOut, User, Shield } from 'lucide-react';
 import logoImage from '../assets/wihout-gb-logo.png';
 

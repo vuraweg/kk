@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, TrendingUp, Users, Award, ArrowRight, Star, Clock, Building, Code, Brain, Plus, Edit, Trash2, Save, X } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/SecureAuthContext';
 import FeaturedHiringsCarousel from '../components/FeaturedHiringsCarousel';
 
 const HomePage: React.FC = () => {
