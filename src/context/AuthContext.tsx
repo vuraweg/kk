@@ -5,11 +5,11 @@ import { debounce } from 'lodash'; // Make sure to install lodash if not already
 
 // Global rate limiting
 let lastSignupAttempt = 0;
-const GLOBAL_COOLDOWN = 10000; // 10 seconds between ANY signup attempts
+const GLOBAL_COOLDOWN = 30000; // 30 seconds between ANY signup attempts
 
 // Email-specific rate limiting
 const emailAttempts = new Map<string, number>();
-const EMAIL_COOLDOWN = 60000; // 60 seconds (1 minute) between attempts for the same email
+const EMAIL_COOLDOWN = 120000; // 120 seconds (2 minutes) between attempts for the same email
 
 // This is the actual signup logic
 const performSignup = async (email: string, password: string, fullName: string) => {
