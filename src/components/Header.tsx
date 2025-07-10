@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, User, Shield } from 'lucide-react';
+import { LogOut, User, Shield, Phone } from 'lucide-react';
 import logoImage from '../assets/wihout-gb-logo.png';
 
 const Header: React.FC = () => {
@@ -14,16 +14,26 @@ const Header: React.FC = () => {
     if (!user) return '';
     
     // If user has a name, use it
-    if (user.name && user.name.trim() && user.name !== 'Vk1234567@') {
+    if (user.name && user.name.trim() && user.name !== 'User') {
       return user.name;
     }
     
-    // Fallback to email prefix
-    if (user.email) {
-      return user.email.split('@')[0];
+    // Fallback to phone number (last 4 digits)
+    if (user.phone) {
+      const phoneDigits = user.phone.replace(/\D/g, '');
+      return `User ${phoneDigits.slice(-4)}`;
     }
     
     return 'User';
+  };
+
+  const getFormattedPhone = () => {
+    if (!user?.phone) return '';
+    const phoneDigits = user.phone.replace(/\D/g, '');
+    if (phoneDigits.length === 10) {
+      return `+91-${phoneDigits.slice(0, 3)}-${phoneDigits.slice(3, 6)}-${phoneDigits.slice(6)}`;
+    }
+    return user.phone;
   };
 
   const handleSignOut = async () => {
@@ -33,6 +43,7 @@ const Header: React.FC = () => {
       console.error('Error signing out:', error);
     }
   };
+
   return (
     <header className="bg-white shadow-lg sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -90,19 +101,25 @@ const Header: React.FC = () => {
                   {user?.avatar_url && (
                     <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-gray-200">
                       <img
-                      src={user.avatar_url}
-                      alt="Profile"
+                        src={user.avatar_url}
+                        alt="Profile"
                         className="w-full h-full object-cover"
-                      onError={(e) => {
-                        // Hide image if it fails to load
+                        onError={(e) => {
+                          // Hide image if it fails to load
                           e.currentTarget.parentElement!.style.display = 'none';
-                      }}
+                        }}
                       />
                     </div>
                   )}
                   <div className="hidden sm:block">
                     <span className="text-sm text-gray-500">Welcome,</span>
                     <span className="text-gray-700 font-medium ml-1">{getUserDisplayName()}</span>
+                    {user?.phone && (
+                      <div className="flex items-center text-xs text-gray-500 mt-1">
+                        <Phone className="h-3 w-3 mr-1" />
+                        <span>{getFormattedPhone()}</span>
+                      </div>
+                    )}
                   </div>
                   <span className="sm:hidden text-gray-700 font-medium text-sm">
                     {getUserDisplayName()}
@@ -110,6 +127,11 @@ const Header: React.FC = () => {
                   {user?.provider === 'google' && (
                     <span className="hidden sm:inline text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
                       Google
+                    </span>
+                  )}
+                  {user?.provider === 'phone' && (
+                    <span className="hidden sm:inline text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                      Mobile
                     </span>
                   )}
                 </div>

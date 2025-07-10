@@ -1,65 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
-import { debounce } from 'lodash';
-
-// Global rate limiting
-let lastSignupAttempt = 0;
-const GLOBAL_COOLDOWN = 10000; // 10 seconds between ANY signup attempts
-
-// Email-specific rate limiting
-const emailAttempts = new Map<string, number>();
-const EMAIL_COOLDOWN = 60000; // 60 seconds (1 minute) between attempts for the same email
-
-// This is the actual signup logic
-const performSignup = async (email: string, password: string, fullName: string) => {
-  const now = Date.now();
-  const normalizedEmail = email.toLowerCase().trim();
-
-  console.log(`Attempting signup for ${normalizedEmail}`);
-
-  try {
-    // Use login page as redirect destination
-    const redirectTo = `${window.location.origin}/login`;
-
-    const { data, error } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: {
-        emailRedirectTo: redirectTo,
-        data: {
-          full_name: fullName,
-        }
-      }
-    });
-
-    if (error) {
-      console.error('Sign up error:', error);
-      return { error };
-    }
-
-    console.log('Sign up successful');
-    return { data, error: null };
-  } catch (error) {
-    console.error('Unexpected signup error:', error);
-    return { error };
-  }
-};
 
 interface User {
   id: string;
-  email: string;
+  phone: string;
   name: string;
   avatar_url?: string;
   isAdmin?: boolean;
-  provider?: 'email' | 'google';
+  provider?: 'phone' | 'google';
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  sendOTP: (phone: string) => Promise<{ error: any }>;
+  verifyOTP: (phone: string, otp: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   isAuthenticated: boolean;
@@ -149,7 +105,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-      console.log('Auth state change:', event, session?.user?.email || 'No user');
+      console.log('Auth state change:', event, session?.user?.phone || 'No user');
       try {
         if (event === 'SIGNED_OUT' || !session?.user) {
           setUser(null);
@@ -185,17 +141,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw error;
       }
 
-      // Check if user is admin based on email
-      const adminEmails = ['admin@primojobs.com', 'your-admin-email@gmail.com', 'demo@primojobs.com', 'primoboostai@gmail.com'];
-      const isAdmin = adminEmails.includes(supabaseUser.email || '');
+      // Check if user is admin based on phone number
+      const adminPhones = ['+919876543210', '+911234567890']; // Add admin phone numbers
+      const isAdmin = adminPhones.includes(supabaseUser.phone || '');
 
       const userProfile: User = {
         id: supabaseUser.id,
-        email: supabaseUser.email || '',
+        phone: supabaseUser.phone || '',
         name: profile?.name || supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || 'User',
         avatar_url: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
         isAdmin,
-        provider: supabaseUser.app_metadata?.provider || 'email'
+        provider: supabaseUser.app_metadata?.provider || 'phone'
       };
       setUser(userProfile);
     } catch (error) {
@@ -203,63 +159,62 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Fallback user object
       setUser({
         id: supabaseUser.id,
-        email: supabaseUser.email || '',
+        phone: supabaseUser.phone || '',
         name: 'User',
         isAdmin: false,
-        provider: 'email'
+        provider: 'phone'
       });
     } finally {
       setLoading(false);
       setInitializing(false);
     }
   };
-  
-  // This is the main signup function that will be exposed
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const now = Date.now();
-    const normalizedEmail = email.toLowerCase().trim();
-    
-    // Check global cooldown
-    if (now - lastSignupAttempt < GLOBAL_COOLDOWN) {
-      const waitTime = Math.ceil((GLOBAL_COOLDOWN - (now - lastSignupAttempt)) / 1000);
-      console.log(`Global signup cooldown in effect. Please wait ${waitTime} seconds.`);
-      return { 
-        error: { 
-          message: `Please wait ${waitTime} seconds before trying again.`,
-          status: 429 
-        } 
-      };
+
+  const sendOTP = async (phone: string) => {
+    try {
+      // Ensure phone number is in correct format (+91xxxxxxxxxx)
+      const formattedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
+      
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: formattedPhone,
+        options: {
+          channel: 'sms'
+        }
+      });
+
+      if (error) {
+        console.error('Send OTP error:', error);
+        return { error };
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error('Unexpected send OTP error:', error);
+      return { error };
     }
-    
-    // Check email-specific cooldown
-    const lastEmailAttempt = emailAttempts.get(normalizedEmail) || 0;
-    if (now - lastEmailAttempt < EMAIL_COOLDOWN) {
-      const waitTime = Math.ceil((EMAIL_COOLDOWN - (now - lastEmailAttempt)) / 1000);
-      console.log(`Email cooldown in effect for ${normalizedEmail}. Please wait ${waitTime} seconds.`);
-      return { 
-        error: { 
-          message: `Too many attempts with this email. Please wait ${waitTime} seconds or try a different email.`,
-          status: 429 
-        } 
-      };
-    }
-    
-    // Update timestamps before performing signup
-    lastSignupAttempt = now;
-    emailAttempts.set(normalizedEmail, now);
-    
-    // Perform the actual signup
-    return await performSignup(email, password, fullName);
   };
 
-  const signIn = async (email: string, password: string) => {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      console.error('Sign in error:', error);
+  const verifyOTP = async (phone: string, otp: string) => {
+    try {
+      // Ensure phone number is in correct format
+      const formattedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
+      
+      const { error } = await supabase.auth.verifyOtp({
+        phone: formattedPhone,
+        token: otp,
+        type: 'sms'
+      });
+
+      if (error) {
+        console.error('Verify OTP error:', error);
+        return { error };
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error('Unexpected verify OTP error:', error);
+      return { error };
     }
-    setLoading(false);
-    return { error };
   };
 
   const signInWithGoogle = async () => {
@@ -281,8 +236,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value: AuthContextType = {
     user,
     loading: loading || initializing,
-    signUp,
-    signIn,
+    sendOTP,
+    verifyOTP,
     signInWithGoogle,
     signOut,
     isAuthenticated: !!user,
