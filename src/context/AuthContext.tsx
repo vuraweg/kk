@@ -202,7 +202,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email,
         password,
         options: {
-         emailRedirectTo: undefined, // Disable email confirmation
+          emailRedirectTo: undefined,
+          data: {
+            email_confirm: false
+          }
           data: {
             username,
             full_name: fullName
