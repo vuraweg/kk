@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Loader2, UserPlus, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import logoImage from '../assets/wihout-gb-logo.png';
+import RateLimiter from '../utils/rateLimiter';
 
 const SignupPage: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -18,6 +19,7 @@ const SignupPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState(0);
+  const [remainingAttempts, setRemainingAttempts] = useState(RateLimiter.getRemainingAttempts());
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
@@ -56,6 +58,8 @@ const SignupPage: React.FC = () => {
       [name]: value
     }));
     setError('');
+    // Update remaining attempts display
+    setRemainingAttempts(RateLimiter.getRemainingAttempts());
   };
 
   const validateForm = () => {
@@ -131,6 +135,12 @@ const SignupPage: React.FC = () => {
         
         let errorMessage = 'Failed to create account. Please try again.';
         
+        // Handle rate limiting errors
+        if (signUpError.message?.includes('Too many sign-up attempts') || 
+            signUpError.message?.includes('Sign-up temporarily blocked') ||
+            signUpError.message?.includes('Email sending limit reached')) {
+          errorMessage = signUpError.message;
+        } else
         if (signUpError.message?.includes('already registered')) {
           errorMessage = '📧 Email already registered\n\n• This email is already associated with an account\n• Try logging in instead\n• Use "Forgot Password" if you need to reset your password';
         } else if (signUpError.message?.includes('Username already exists')) {
@@ -147,12 +157,16 @@ const SignupPage: React.FC = () => {
       } else {
         setSuccess('🎉 Account created successfully!\n\n✅ Welcome to Primo JobsCracker!\n📧 Please check your email to verify your account\n🚀 Redirecting to login...');
         setRedirectCountdown(3);
+        // Update remaining attempts after successful signup
+        setRemainingAttempts(RateLimiter.getRemainingAttempts());
       }
     } catch (err) {
       console.error('Unexpected error during sign up:', err);
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
+      // Update remaining attempts display
+      setRemainingAttempts(RateLimiter.getRemainingAttempts());
     }
   };
 
@@ -362,10 +376,15 @@ const SignupPage: React.FC = () => {
             <div>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || RateLimiter.isBlocked()}
                 className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02]"
               >
-                {loading ? (
+                {RateLimiter.isBlocked() ? (
+                  <>
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    Temporarily Blocked ({RateLimiter.getFormattedTimeUntilUnblock()})
+                  </>
+                ) : loading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     Creating Account...
@@ -378,6 +397,14 @@ const SignupPage: React.FC = () => {
                 )}
               </button>
             </div>
+
+            {remainingAttempts < 3 && remainingAttempts > 0 && !RateLimiter.isBlocked() && (
+              <div className="text-center">
+                <p className="text-sm text-amber-600">
+                  ⚠️ {remainingAttempts} attempt{remainingAttempts !== 1 ? 's' : ''} remaining before temporary block
+                </p>
+              </div>
+            )}
           </form>
 
           <div className="mt-6">

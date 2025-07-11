@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { supabase } from '../lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { googleAuth } from '../lib/googleAuth';
+import RateLimiter from '../utils/rateLimiter';
 
 interface User {
   id: string;
@@ -181,6 +182,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const signUp = async (email: string, password: string, username: string, fullName: string) => {
     try {
+      // Check if user is currently blocked due to rate limiting
+      if (RateLimiter.isBlocked()) {
+        const timeLeft = RateLimiter.getFormattedTimeUntilUnblock();
+        return { 
+          error: { 
+            message: `🚫 Too many sign-up attempts\n\n• Please wait ${timeLeft} before trying again\n• This helps prevent spam and protects our service\n• You can try logging in if you already have an account` 
+          } 
+        };
+      }
+
+      // Record this attempt
+      const canProceed = RateLimiter.recordAttempt();
+      if (!canProceed) {
+        const timeLeft = RateLimiter.getFormattedTimeUntilUnblock();
+        return { 
+          error: { 
+            message: `🚫 Sign-up temporarily blocked\n\n• Too many attempts in a short time\n• Please wait ${timeLeft} before trying again\n• This helps prevent spam and protects our service` 
+          } 
+        };
+      }
+
       // First check if username already exists
       const { data: existingUser, error: usernameCheckError } = await supabase
         .from('user_profiles')
@@ -211,11 +233,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Sign up error:', error);
+        
+        // Handle specific rate limit errors from Supabase
+        if (error.message?.includes('email rate limit exceeded') || error.message?.includes('over_email_send_rate_limit')) {
+          const timeLeft = RateLimiter.getFormattedTimeUntilUnblock();
+          return { 
+            error: { 
+              message: `📧 Email sending limit reached\n\n• Supabase has temporarily limited email sending\n• Please wait ${timeLeft || '15 minutes'} before trying again\n• This is a security measure to prevent spam\n• You can try logging in if you already have an account` 
+            } 
+          };
+        }
+        
         return { error };
       }
 
       // If signup successful, create user profile
       if (data.user) {
+        // Reset rate limiter on successful signup
+        RateLimiter.reset();
+        
         const { error: profileError } = await supabase
           .from('user_profiles')
           .insert({
