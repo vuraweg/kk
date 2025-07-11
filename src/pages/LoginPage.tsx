@@ -1,22 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Loader2, AlertCircle, CheckCircle, Phone, MessageSquare, Timer } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle, LogIn, Eye, EyeOff } from 'lucide-react';
 import logoImage from '../assets/wihout-gb-logo.png';
 
 const LoginPage: React.FC = () => {
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
+  const [formData, setFormData] = useState({
+    emailOrUsername: '',
+    password: ''
+  });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [verifying, setVerifying] = useState(false);
   const [success, setSuccess] = useState('');
-  const [countdown, setCountdown] = useState(0);
-  const [autoVerifying, setAutoVerifying] = useState(false);
-  const { sendOTP, verifyOTP, signInWithGoogle, isAuthenticated, user } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
+  const { signIn, signInWithGoogle, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Handle authentication state changes
   useEffect(() => {
@@ -29,14 +27,6 @@ const LoginPage: React.FC = () => {
       return () => clearTimeout(redirectTimer);
     }
   }, [isAuthenticated, user, navigate]);
-
-  // Handle countdown timer for resend OTP
-  useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [countdown]);
 
   // Auto-clear messages after some time
   useEffect(() => {
@@ -53,197 +43,67 @@ const LoginPage: React.FC = () => {
     }
   }, [error]);
 
-  const formatPhoneNumber = (value: string) => {
-    // Remove all non-digits
-    const digits = value.replace(/\D/g, '');
-    
-    // Limit to 10 digits
-    const limitedDigits = digits.slice(0, 10);
-    
-    // Format as XXX-XXX-XXXX
-    if (limitedDigits.length >= 6) {
-      return `${limitedDigits.slice(0, 3)}-${limitedDigits.slice(3, 6)}-${limitedDigits.slice(6)}`;
-    } else if (limitedDigits.length >= 3) {
-      return `${limitedDigits.slice(0, 3)}-${limitedDigits.slice(3)}`;
-    }
-    return limitedDigits;
-  };
-
-  const validatePhoneNumber = (phoneNumber: string) => {
-    const digits = phoneNumber.replace(/\D/g, '');
-    return digits.length === 10 && /^[6-9]/.test(digits);
-  };
-
-  const handleSendOTP = async () => {
-    
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
     setError('');
-    setSuccess('');
-    
-    const phoneDigits = phone.replace(/\D/g, '');
-    
-    if (!validatePhoneNumber(phone)) {
-      setError('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const { error: sendError } = await sendOTP(phoneDigits);
-      
-      if (sendError) {
-        console.error('Send OTP failed:', sendError);
-        
-        let errorMessage = 'Failed to send OTP. Please try again.';
-        
-        if (sendError.message?.includes('rate limit') || sendError.message?.includes('Too many')) {
-          errorMessage = '⏰ Too many OTP requests\n\n• Please wait 5-10 minutes before requesting again\n• This is a security measure to prevent spam\n\nTry again later or contact support if needed.';
-        } else if (sendError.message?.includes('Invalid phone number')) {
-          errorMessage = '📱 Invalid phone number format\n\n• Enter a valid 10-digit Indian mobile number\n• Number should start with 6, 7, 8, or 9\n• Don\'t include +91 or country code\n\nExample: 9876543210';
-        } else if (sendError.message?.includes('Network') || sendError.message?.includes('timeout')) {
-          errorMessage = '🌐 Network connection issue\n\n• Check your internet connection\n• Try again in a few moments\n• Contact support if problem persists';
-        } else if (sendError.message) {
-          errorMessage = sendError.message;
-        }
-        
-        setError(errorMessage);
-      } else {
-        setSuccess(`📱 OTP sent successfully to +91-${formatPhoneNumber(phoneDigits)}\n\n• Check your SMS inbox\n• OTP is valid for 5 minutes\n• Enter the 6-digit code below`);
-        setStep('otp');
-        setCountdown(60); // 60 seconds before allowing resend
-      }
-    } catch (err) {
-      console.error('Unexpected error during send OTP:', err);
-      setError('An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
-    }
   };
 
-  const handleVerifyOTP = async (e: React.FormEvent) => {
+  const validateForm = () => {
+    if (!formData.emailOrUsername.trim()) {
+      setError('Email or username is required');
+      return false;
+    }
+
+    if (!formData.password) {
+      setError('Password is required');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Prevent form submission if auto-verification is in progress
-    if (autoVerifying) {
-      return;
-    }
-    
-    setError('');
-    setSuccess('');
-    
-    // Show immediate feedback that we're verifying
-    if (otp.length === 6) {
-      setVerifying(true);
-      setSuccess('🔍 Verifying OTP...\n\nPlease wait while we confirm your code');
-    }
-    
-    if (otp.length !== 6) {
-      setError('Please enter the complete 6-digit OTP');
-      setVerifying(false);
+    if (!validateForm()) {
       return;
     }
 
     setLoading(true);
+    setError('');
+    setSuccess('');
 
     try {
-      const phoneDigits = phone.replace(/\D/g, '');
-      const { error: verifyError } = await verifyOTP(phoneDigits, otp);
-      
-      if (verifyError) {
-        console.error('Verify OTP failed:', verifyError);
+      const { error: signInError } = await signIn(formData.emailOrUsername, formData.password);
+
+      if (signInError) {
+        console.error('Sign in failed:', signInError);
         
-        setVerifying(false);
-        let errorMessage = 'Invalid OTP. Please try again.';
+        let errorMessage = 'Invalid credentials. Please try again.';
         
-        if (verifyError.code === 'otp_expired' || verifyError.message?.includes('expired')) {
-          errorMessage = '⏰ OTP has expired\n\n• OTP is valid for only 5 minutes\n• Request a new OTP to continue\n• Make sure to enter OTP quickly after receiving';
-        } else if (verifyError.code === 'otp_invalid' || verifyError.message?.includes('invalid') || verifyError.message?.includes('wrong')) {
-          errorMessage = '❌ Invalid OTP code\n\n• Double-check the 6-digit code from SMS\n• Make sure you\'re entering the latest OTP\n• Request new OTP if needed';
-        } else if (verifyError.code === 'too_many_requests' || verifyError.message?.includes('rate limit') || verifyError.message?.includes('Too many')) {
-          errorMessage = '⏰ Too many verification attempts\n\n• Please wait 5-10 minutes\n• Request a new OTP after waiting\n• This is a security measure';
-        } else if (verifyError.message) {
-          errorMessage = verifyError.message;
+        if (signInError.message?.includes('Invalid login credentials')) {
+          errorMessage = '🔒 Invalid credentials\n\n• Check your email/username and password\n• Make sure caps lock is off\n• Try using your email instead of username';
+        } else if (signInError.message?.includes('Email not confirmed')) {
+          errorMessage = '📧 Email not verified\n\n• Please check your email for verification link\n• Click the link to verify your account\n• Check spam folder if needed';
+        } else if (signInError.message?.includes('Username not found')) {
+          errorMessage = '👤 Username not found\n\n• This username doesn\'t exist\n• Try using your email address instead\n• Check spelling and try again';
+        } else if (signInError.message?.includes('Too many requests')) {
+          errorMessage = '⏰ Too many login attempts\n\n• Please wait a few minutes before trying again\n• This is a security measure\n• Try again later';
+        } else if (signInError.message) {
+          errorMessage = signInError.message;
         }
         
         setError(errorMessage);
       } else {
-        setVerifying(false);
-        setSuccess('✅ Phone number verified successfully!\n\n🎉 Welcome to Primo JobsCracker!\n🚀 Redirecting to dashboard...');
-        // Keep loading state until redirect happens
+        setSuccess('✅ Login successful!\n\n🎉 Welcome back to Primo JobsCracker!\n🚀 Redirecting to dashboard...');
       }
     } catch (err) {
-      console.error('Unexpected error during verify OTP:', err);
-      setVerifying(false);
+      console.error('Unexpected error during sign in:', err);
       setError('An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAutoVerifyOTP = async (otpValue: string) => {
-    setAutoVerifying(true);
-    setError('');
-    setSuccess('');
-    setVerifying(true);
-    setSuccess('🔍 Verifying OTP...\n\nPlease wait while we confirm your code');
-    setLoading(true);
-
-    try {
-      const phoneDigits = phone.replace(/\D/g, '');
-      const { error: verifyError } = await verifyOTP(phoneDigits, otpValue);
-      
-      if (verifyError) {
-        console.error('Verify OTP failed:', verifyError);
-        
-        setVerifying(false);
-        let errorMessage = 'Invalid OTP. Please try again.';
-        
-        if (verifyError.code === 'otp_expired' || verifyError.message?.includes('expired')) {
-          errorMessage = '⏰ OTP has expired\n\n• OTP is valid for only 5 minutes\n• Request a new OTP to continue\n• Make sure to enter OTP quickly after receiving';
-        } else if (verifyError.code === 'otp_invalid' || verifyError.message?.includes('invalid') || verifyError.message?.includes('wrong')) {
-          errorMessage = '❌ Invalid OTP code\n\n• Double-check the 6-digit code from SMS\n• Make sure you\'re entering the latest OTP\n• Request new OTP if needed';
-        } else if (verifyError.code === 'too_many_requests' || verifyError.message?.includes('rate limit') || verifyError.message?.includes('Too many')) {
-          errorMessage = '⏰ Too many verification attempts\n\n• Please wait 5-10 minutes\n• Request a new OTP after waiting\n• This is a security measure';
-        } else if (verifyError.message) {
-          errorMessage = verifyError.message;
-        }
-        
-        setError(errorMessage);
-      } else {
-        setVerifying(false);
-        setSuccess('✅ Phone number verified successfully!\n\n🎉 Welcome to Primo JobsCracker!\n🚀 Redirecting to dashboard...');
-        // Keep loading state until redirect happens
-      }
-    } catch (err) {
-      console.error('Unexpected error during verify OTP:', err);
-      setVerifying(false);
-      setError('An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
-      setAutoVerifying(false);
-    }
-  };
-
-  const handleResendOTP = async () => {
-    if (countdown > 0) return;
-    
-    setError('');
-    setSuccess('');
-    setLoading(true);
-
-    try {
-      const phoneDigits = phone.replace(/\D/g, '');
-      const { error: sendError } = await sendOTP(phoneDigits);
-      
-      if (sendError) {
-        setError('Failed to resend OTP. Please try again.');
-      } else {
-        setSuccess('📱 New OTP sent successfully!\n\n• Check your SMS inbox\n• Use the latest OTP received');
-        setCountdown(60);
-        setOtp(''); // Clear previous OTP
-      }
-    } catch (err) {
-      setError('Failed to resend OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -260,7 +120,7 @@ const LoginPage: React.FC = () => {
       if (googleError) {
         console.error('Google sign-in error:', googleError);
         
-        let errorMessage = 'Google sign-in failed. Please try mobile OTP login below.';
+        let errorMessage = 'Google sign-in failed. Please try email/password login below.';
         
         if (googleError.message?.includes('popup')) {
           errorMessage = 'Google sign-in popup was blocked or closed.\n\nPlease allow popups for this site and try again.';
@@ -276,18 +136,10 @@ const LoginPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Unexpected error during Google sign-in:', err);
-      setError('An unexpected error occurred with Google sign-in. Please try mobile OTP login below.');
+      setError('An unexpected error occurred with Google sign-in. Please try email/password login below.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleBackToPhone = () => {
-    setStep('phone');
-    setOtp('');
-    setError('');
-    setSuccess('');
-    setCountdown(0);
   };
 
   return (
@@ -309,13 +161,10 @@ const LoginPage: React.FC = () => {
             />
           </div>
           <h2 className="mt-4 text-3xl font-bold text-gray-900">
-            {step === 'phone' ? 'Welcome Back' : 'Verify OTP'}
+            Welcome Back
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            {step === 'phone' 
-              ? 'Sign in with your mobile number' 
-              : `Enter the OTP sent to +91-${formatPhoneNumber(phone.replace(/\D/g, ''))}`
-            }
+            Sign in to your account
           </p>
         </div>
         
@@ -338,156 +187,76 @@ const LoginPage: React.FC = () => {
             </div>
           )}
 
-          {step === 'phone' ? (
-            <div className="space-y-6">
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                  Mobile Number
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 text-sm">+91</span>
-                  </div>
-                  <input
-                    id="phone"
-                    type="tel"
-                    required
-                    value={phone}
-                    onChange={(e) => {
-                      const formatted = formatPhoneNumber(e.target.value);
-                      setPhone(formatted);
-                      setError('');
-                    }}
-                    className="block w-full pl-12 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    placeholder="9876543210"
-                    disabled={loading}
-                    maxLength={12} // XXX-XXX-XXXX format
-                  />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Enter your 10-digit mobile number (without +91)
-                </p>
-              </div>
+          <form className="space-y-6" onSubmit={handleSignIn}>
+            <div>
+              <label htmlFor="emailOrUsername" className="block text-sm font-medium text-gray-700 mb-2">
+                Email or Username
+              </label>
+              <input
+                id="emailOrUsername"
+                name="emailOrUsername"
+                type="text"
+                required
+                value={formData.emailOrUsername}
+                onChange={handleInputChange}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                placeholder="Enter your email or username"
+                disabled={loading}
+                autoComplete="username"
+              />
+            </div>
 
-              <div>
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Enter your password"
+                  disabled={loading}
+                  autoComplete="current-password"
+                />
                 <button
-                  disabled={loading || !validatePhoneNumber(phone)}
-                  className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02]"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (!loading && validatePhoneNumber(phone)) {
-                      handleSendOTP();
-                    }
-                  }}
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Sending OTP...
-                    </>
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400" />
                   ) : (
-                    <>
-                      <MessageSquare className="h-4 w-4 mr-2" />
-                      Send OTP
-                    </>
+                    <Eye className="h-4 w-4 text-gray-400" />
                   )}
                 </button>
               </div>
             </div>
-          ) : (
-            <form className="space-y-6" onSubmit={handleVerifyOTP}>
-              <div>
-                <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
-                  Enter 6-Digit OTP
-                </label>
-                <input
-                  id="otp"
-                  type="text"
-                  required
-                  value={otp}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                    setOtp(value);
-                    setError('');
-                    setVerifying(false);
-                    
-                    // Auto-verify when 6 digits are entered
-                    if (value.length === 6) {
-                      // Prevent form submission during auto-verification
-                      e.preventDefault();
-                      setAutoVerifying(true);
-                      
-                      // Use a longer delay to ensure state is updated
-                      setTimeout(() => {
-                        // Call verification function directly without form submission
-                        handleAutoVerifyOTP(value);
-                      }, 300); // Reduced delay but enough to prevent form submission
-                    }
-                  }}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-center text-lg font-mono tracking-widest"
-                  placeholder="123456"
-                  disabled={loading}
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Check your SMS for the 6-digit verification code
-                </p>
-              </div>
 
-              <div>
-                <button
-                  type="submit"
-                  disabled={loading || verifying || autoVerifying || otp.length !== 6}
-                  className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] ${
-                    verifying 
-                      ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' 
-                      : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
-                  }`}
-                >
-                  {loading || verifying ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      {verifying ? 'Verifying OTP...' : 'Verifying...'}
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Verify & Sign In
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={handleBackToPhone}
-                  disabled={loading || verifying || autoVerifying}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
-                >
-                  ← Change Number
-                </button>
-                
-                <button
-                  type="button"
-                  onClick={handleResendOTP}
-                  disabled={loading || verifying || autoVerifying || countdown > 0}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 flex items-center"
-                >
-                  {countdown > 0 ? (
-                    <>
-                      <Timer className="h-4 w-4 mr-1" />
-                      Resend in {countdown}s
-                    </>
-                  ) : (
-                    'Resend OTP'
-                  )}
-                </button>
-              </div>
-            </form>
-          )}
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02]"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Signing In...
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="h-4 w-4 mr-2" />
+                    Sign In
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
 
           <div className="mt-6">
             <div className="relative">

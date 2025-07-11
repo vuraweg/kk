@@ -4,18 +4,19 @@ import { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface User {
   id: string;
-  phone: string;
-  name: string;
+  email: string;
+  username: string;
+  fullName: string;
   avatar_url?: string;
   isAdmin?: boolean;
-  provider?: 'phone' | 'google';
+  provider?: 'email' | 'google';
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  sendOTP: (phone: string) => Promise<{ error: any }>;
-  verifyOTP: (phone: string, otp: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, username: string, fullName: string) => Promise<{ error: any }>;
+  signIn: (emailOrUsername: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   isAuthenticated: boolean;
@@ -105,7 +106,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-      console.log('Auth state change:', event, session?.user?.phone || 'No user');
+      console.log('Auth state change:', event, session?.user?.email || 'No user');
       try {
         if (event === 'SIGNED_OUT' || !session?.user) {
           setUser(null);
@@ -132,7 +133,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const fetchUserProfile = async (supabaseUser: SupabaseUser) => {
     try {
       const { data: profile, error } = await supabase
-        .from('users')
+        .from('user_profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .single();
@@ -141,17 +142,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw error;
       }
 
-      // Check if user is admin based on phone number
-      const adminPhones = ['+919876543210', '+911234567890']; // Add admin phone numbers
-      const isAdmin = adminPhones.includes(supabaseUser.phone || '');
+      // Check if user is admin based on email
+      const adminEmails = ['admin@primojobs.com', 'admin@example.com'];
+      const isAdmin = adminEmails.includes(supabaseUser.email || '');
 
       const userProfile: User = {
         id: supabaseUser.id,
-        phone: supabaseUser.phone || '',
-        name: profile?.name || supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || 'User',
+        email: supabaseUser.email || '',
+        username: profile?.username || supabaseUser.user_metadata?.username || 'user',
+        fullName: profile?.full_name || supabaseUser.user_metadata?.full_name || 'User',
         avatar_url: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
         isAdmin,
-        provider: supabaseUser.app_metadata?.provider || 'phone'
+        provider: supabaseUser.app_metadata?.provider || 'email'
       };
       setUser(userProfile);
     } catch (error) {
@@ -159,10 +161,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Fallback user object
       setUser({
         id: supabaseUser.id,
-        phone: supabaseUser.phone || '',
-        name: 'User',
+        email: supabaseUser.email || '',
+        username: 'user',
+        fullName: 'User',
         isAdmin: false,
-        provider: 'phone'
+        provider: 'email'
       });
     } finally {
       setLoading(false);
@@ -170,49 +173,91 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const sendOTP = async (phone: string) => {
+  const signUp = async (email: string, password: string, username: string, fullName: string) => {
     try {
-      // Ensure phone number is in correct format (+91xxxxxxxxxx)
-      const formattedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
-      
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: formattedPhone,
+      // First check if username already exists
+      const { data: existingUser } = await supabase
+        .from('user_profiles')
+        .select('username')
+        .eq('username', username)
+        .single();
+
+      if (existingUser) {
+        return { error: { message: 'Username already exists. Please choose a different username.' } };
+      }
+
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
         options: {
-          channel: 'sms'
+          data: {
+            username,
+            full_name: fullName
+          }
         }
       });
 
       if (error) {
-        console.error('Send OTP error:', error);
+        console.error('Sign up error:', error);
         return { error };
+      }
+
+      // If signup successful, create user profile
+      if (data.user) {
+        const { error: profileError } = await supabase
+          .from('user_profiles')
+          .insert({
+            id: data.user.id,
+            email_address: email,
+            username,
+            full_name: fullName,
+            role: 'client'
+          });
+
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+        }
       }
 
       return { error: null };
     } catch (error) {
-      console.error('Unexpected send OTP error:', error);
+      console.error('Unexpected sign up error:', error);
       return { error };
     }
   };
 
-  const verifyOTP = async (phone: string, otp: string) => {
+  const signIn = async (emailOrUsername: string, password: string) => {
     try {
-      // Ensure phone number is in correct format
-      const formattedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
-      
-      const { error } = await supabase.auth.verifyOtp({
-        phone: formattedPhone,
-        token: otp,
-        type: 'sms'
+      let email = emailOrUsername;
+
+      // Check if input is username (doesn't contain @)
+      if (!emailOrUsername.includes('@')) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('email_address')
+          .eq('username', emailOrUsername)
+          .single();
+
+        if (!profile) {
+          return { error: { message: 'Username not found. Please check your username or use email to login.' } };
+        }
+
+        email = profile.email_address;
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       });
 
       if (error) {
-        console.error('Verify OTP error:', error);
+        console.error('Sign in error:', error);
         return { error };
       }
 
       return { error: null };
     } catch (error) {
-      console.error('Unexpected verify OTP error:', error);
+      console.error('Unexpected sign in error:', error);
       return { error };
     }
   };
@@ -236,8 +281,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value: AuthContextType = {
     user,
     loading: loading || initializing,
-    sendOTP,
-    verifyOTP,
+    signUp,
+    signIn,
     signInWithGoogle,
     signOut,
     isAuthenticated: !!user,
