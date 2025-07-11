@@ -1,6 +1,6 @@
 class RateLimiter {
   private static readonly STORAGE_KEY = 'signup_rate_limit';
-  private static readonly MAX_ATTEMPTS = 1;
+  private static readonly MAX_ATTEMPTS = 5;
   private static readonly BLOCK_DURATION = 15 * 60 * 1000; // 15 minutes in milliseconds
 
   private static getStoredData(): { attempts: number; firstAttempt: number; blockedUntil?: number } | null {
