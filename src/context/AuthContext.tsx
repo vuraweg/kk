@@ -176,11 +176,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signUp = async (email: string, password: string, username: string, fullName: string) => {
     try {
       // First check if username already exists
-      const { data: existingUser } = await supabase
+      const { data: existingUser, error: usernameCheckError } = await supabase
         .from('user_profiles')
         .select('username')
         .eq('username', username)
         .single();
+
+      // If there's an error other than "not found", handle it
+      if (usernameCheckError && usernameCheckError.code !== 'PGRST116') {
+        console.error('Username check error:', usernameCheckError);
+        return { error: { message: 'Unable to verify username availability. Please try again.' } };
+      }
 
       if (existingUser) {
         return { error: { message: 'Username already exists. Please choose a different username.' } };
@@ -210,6 +216,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             id: data.user.id,
             email_address: email,
             username,
+            username,
             full_name: fullName,
             role: 'client'
           });
@@ -232,11 +239,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Check if input is username (doesn't contain @)
       if (!emailOrUsername.includes('@')) {
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('user_profiles')
           .select('email_address')
           .eq('username', emailOrUsername)
           .single();
+
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error('Profile lookup error:', profileError);
+          return { error: { message: 'Unable to find user. Please try again.' } };
+        }
 
         if (!profile) {
           return { error: { message: 'Username not found. Please check your username or use email to login.' } };
