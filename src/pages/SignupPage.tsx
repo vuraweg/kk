@@ -155,7 +155,7 @@ const SignupPage: React.FC = () => {
         
         setError(errorMessage);
       } else {
-        setSuccess('🎉 Account created successfully!\n\n✅ Welcome to Primo JobsCracker!\n📧 Please check your email to verify your account\n🚀 Redirecting to login...');
+        setSuccess('🎉 Account created successfully!\n\n✅ Welcome to Primo JobsCracker!\n🚀 You can now login with your credentials!');
         setRedirectCountdown(3);
         // Update remaining attempts after successful signup
         setRemainingAttempts(RateLimiter.getRemainingAttempts());
