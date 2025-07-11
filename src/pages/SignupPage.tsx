@@ -128,7 +128,9 @@ const SignupPage: React.FC = () => {
   };
 
   const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
+    if (e) {
+      e.preventDefault();
+    }
     
     // Prevent form submission if auto-verification is in progress
     if (autoVerifying) {
@@ -432,7 +434,7 @@ const SignupPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            <form className="space-y-6" onSubmit={handleVerifyOTP}>
+            <div className="space-y-6">
               <div>
                 <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
                   Enter 6-Digit OTP
@@ -440,7 +442,6 @@ const SignupPage: React.FC = () => {
                 <input
                   id="otp"
                   type="text"
-                  required
                   value={otp}
                   onChange={(e) => {
                     const value = e.target.value.replace(/\D/g, '').slice(0, 6);
@@ -450,15 +451,11 @@ const SignupPage: React.FC = () => {
                     
                     // Auto-verify when 6 digits are entered
                     if (value.length === 6) {
-                      // Prevent form submission during auto-verification
-                      e.preventDefault();
                       setAutoVerifying(true);
                       
-                      // Use a longer delay to ensure state is updated
                       setTimeout(() => {
-                        // Call verification function directly without form submission
                         handleAutoVerifyOTP(value);
-                      }, 300); // Reduced delay but enough to prevent form submission
+                      }, 300);
                     }
                   }}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-center text-lg font-mono tracking-widest"
@@ -474,7 +471,8 @@ const SignupPage: React.FC = () => {
 
               <div>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleVerifyOTP}
                   disabled={loading || verifying || autoVerifying || otp.length !== 6}
                   className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] ${
                     verifying 
@@ -522,7 +520,7 @@ const SignupPage: React.FC = () => {
                   )}
                 </button>
               </div>
-            </form>
+            </div>
           )}
 
           <div className="mt-6">
