@@ -15,11 +15,16 @@ export interface GoogleUser {
 }
 
 class GoogleAuthService {
-  private clientId = '688195257967-5o595i8j7de6oesi6s5bdv41j19id560.apps.googleusercontent.com';
+  private clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   private isInitialized = false;
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
+
+    // Check if Google Client ID is configured
+    if (!this.clientId) {
+      throw new Error('Google Client ID is not configured. Please set VITE_GOOGLE_CLIENT_ID in your environment variables.');
+    }
 
     return new Promise((resolve, reject) => {
       // Load Google Identity Services script
