@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, User, Mail, Lock, Loader2, Github, CheckCircle, X } from 'lucide-react';
-import { AuthService, AuthError } from '../../services/authService';
+import { useAuth } from '../../context/AuthContext';
 import { validateForm, signupValidationRules, sanitizeInput, validatePasswordStrength } from '../../utils/validation';
 import { FormErrors } from '../../types/auth';
 
@@ -13,8 +13,10 @@ export const SignupForm: React.FC<SignupFormProps> = ({
   onSwitchToLogin,
   onSignupSuccess,
 }) => {
+  const { signUp, signInWithGoogle } = useAuth();
   const [formData, setFormData] = useState({
-    name: '',
+    username: '',
+    fullName: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -42,16 +44,34 @@ export const SignupForm: React.FC<SignupFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate form
-    const validationErrors = validateForm(formData, signupValidationRules);
+    // Basic validation
+    if (!formData.username.trim()) {
+      setErrors({ username: 'Username is required' });
+      return;
+    }
     
-    // Check password confirmation
+    if (!formData.fullName.trim()) {
+      setErrors({ fullName: 'Full name is required' });
+      return;
+    }
+    
+    if (!formData.email.trim()) {
+      setErrors({ email: 'Email is required' });
+      return;
+    }
+    
+    if (!formData.password) {
+      setErrors({ password: 'Password is required' });
+      return;
+    }
+    
     if (formData.password !== formData.confirmPassword) {
-      validationErrors.confirmPassword = 'Passwords do not match';
+      setErrors({ confirmPassword: 'Passwords do not match' });
+      return;
     }
 
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
+    if (formData.password.length < 6) {
+      setErrors({ password: 'Password must be at least 6 characters' });
       return;
     }
 
@@ -59,24 +79,22 @@ export const SignupForm: React.FC<SignupFormProps> = ({
     setErrors({});
 
     try {
-      await AuthService.signup({
-        name: formData.name,
-        email: formData.email,
-        password: formData.password,
-        confirmPassword: formData.confirmPassword,
-      });
+      const { error } = await signUp(
+        formData.email,
+        formData.password,
+        formData.username,
+        formData.fullName
+      );
 
-      onSignupSuccess();
-    } catch (error) {
-      if (error instanceof AuthError) {
-        if (error.field) {
-          setErrors({ [error.field]: error.message });
-        } else {
-          setErrors({ general: error.message });
-        }
+      if (error) {
+        console.error('Sign up failed:', error);
+        setErrors({ general: error.message || 'Failed to create account. Please try again.' });
       } else {
-        setErrors({ general: 'An unexpected error occurred. Please try again.' });
+        onSignupSuccess();
       }
+    } catch (error) {
+      console.error('Unexpected error during sign up:', error);
+      setErrors({ general: 'An unexpected error occurred. Please try again.' });
     } finally {
       setIsLoading(false);
     }
@@ -87,19 +105,16 @@ export const SignupForm: React.FC<SignupFormProps> = ({
     setErrors({});
 
     try {
-      if (provider === 'google') {
-        await AuthService.loginWithGoogle();
-      } else {
-        await AuthService.loginWithGitHub();
-      }
+      const { error } = await signInWithGoogle();
       
-      onSignupSuccess();
-    } catch (error) {
-      if (error instanceof AuthError) {
-        setErrors({ general: error.message });
+      if (error) {
+        setErrors({ general: error.message || `${provider} signup failed. Please try again.` });
       } else {
-        setErrors({ general: `${provider} signup failed. Please try again.` });
+        onSignupSuccess();
       }
+    } catch (error) {
+      console.error('Social signup error:', error);
+      setErrors({ general: `${provider} signup failed. Please try again.` });
     } finally {
       setIsLoading(false);
     }
@@ -136,29 +151,55 @@ export const SignupForm: React.FC<SignupFormProps> = ({
         </div>
       )}
 
-      {/* Name Field */}
+      {/* Username Field */}
       <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+          Username
+        </label>
+        <div className="relative">
+          <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input
+            type="text"
+            id="username"
+            name="username"
+            value={formData.username}
+            onChange={handleInputChange}
+            className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+              errors.username ? 'border-red-300 bg-red-50' : 'border-gray-300'
+            }`}
+            placeholder="Enter your username"
+            disabled={isLoading}
+            autoComplete="username"
+          />
+        </div>
+        {errors.username && (
+          <p className="mt-1 text-sm text-red-600">{errors.username}</p>
+        )}
+      </div>
+
+      {/* Full Name Field */}
+      <div>
+        <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
           Full Name
         </label>
         <div className="relative">
           <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"
-            id="name"
-            name="name"
-            value={formData.name}
+            id="fullName"
+            name="fullName"
+            value={formData.fullName}
             onChange={handleInputChange}
             className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-              errors.name ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              errors.fullName ? 'border-red-300 bg-red-50' : 'border-gray-300'
             }`}
             placeholder="Enter your full name"
             disabled={isLoading}
             autoComplete="name"
           />
         </div>
-        {errors.name && (
-          <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+        {errors.fullName && (
+          <p className="mt-1 text-sm text-red-600">{errors.fullName}</p>
         )}
       </div>
 

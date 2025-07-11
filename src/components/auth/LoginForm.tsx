@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Mail, Lock, Loader2, Github } from 'lucide-react';
-import { AuthService, AuthError } from '../../services/authService';
-import { RateLimiter } from '../../utils/rateLimiter';
-import { validateForm, loginValidationRules, sanitizeInput } from '../../utils/validation';
-import { FormErrors } from '../../types/auth';
+import { useAuth } from '../../context/AuthContext';
 
 interface LoginFormProps {
   onSwitchToSignup: () => void;
@@ -16,26 +13,23 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   onForgotPassword,
   onClose,
 }) => {
+  const { signIn, signInWithGoogle } = useAuth();
   const [formData, setFormData] = useState({
-    email: '',
+    emailOrUsername: '',
     password: '',
-    rememberMe: false,
   });
-  const [errors, setErrors] = useState<FormErrors>({});
+  const [errors, setErrors] = useState<any>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [isBlocked, setIsBlocked] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
-    const sanitizedValue = type === 'checkbox' ? checked : sanitizeInput(value);
+    const { name, value } = e.target;
     
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : sanitizedValue,
+      [name]: value,
     }));
 
-    // Clear field error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
@@ -44,18 +38,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Check rate limiting
-    if (RateLimiter.isBlocked()) {
-      const timeLeft = Math.ceil(RateLimiter.getTimeUntilUnblock() / 1000 / 60);
-      setErrors({ general: `Too many failed attempts. Try again in ${timeLeft} minutes.` });
-      setIsBlocked(true);
+    if (!formData.emailOrUsername.trim()) {
+      setErrors({ emailOrUsername: 'Email or username is required' });
       return;
     }
 
-    // Validate form
-    const validationErrors = validateForm(formData, loginValidationRules);
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
+    if (!formData.password) {
+      setErrors({ password: 'Password is required' });
       return;
     }
 
@@ -63,69 +52,41 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     setErrors({});
 
     try {
-      await AuthService.login({
-        email: formData.email,
-        password: formData.password,
-        rememberMe: formData.rememberMe,
-      });
+      const { error } = await signIn(formData.emailOrUsername, formData.password);
 
-      RateLimiter.reset(); // Reset on successful login
-      onClose();
-    } catch (error) {
-      RateLimiter.recordAttempt();
-      
-      if (error instanceof AuthError) {
-        if (error.field) {
-          setErrors({ [error.field]: error.message });
-        } else {
-          setErrors({ general: error.message });
-        }
+      if (error) {
+        console.error('Sign in failed:', error);
+        setErrors({ general: error.message || 'Invalid credentials. Please try again.' });
       } else {
-        setErrors({ general: 'An unexpected error occurred. Please try again.' });
+        onClose();
       }
-
-      // Check if now blocked
-      if (RateLimiter.isBlocked()) {
-        setIsBlocked(true);
-      }
+    } catch (error) {
+      console.error('Unexpected error during sign in:', error);
+      setErrors({ general: 'An unexpected error occurred. Please try again.' });
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleSocialLogin = async (provider: 'google' | 'github') => {
-    if (RateLimiter.isBlocked()) {
-      const timeLeft = Math.ceil(RateLimiter.getTimeUntilUnblock() / 1000 / 60);
-      setErrors({ general: `Too many failed attempts. Try again in ${timeLeft} minutes.` });
-      return;
-    }
-
     setIsLoading(true);
     setErrors({});
 
     try {
-      if (provider === 'google') {
-        await AuthService.loginWithGoogle();
-      } else {
-        await AuthService.loginWithGitHub();
-      }
+      const { error } = await signInWithGoogle();
       
-      RateLimiter.reset();
-      onClose();
+      if (error) {
+        setErrors({ general: error.message || `${provider} login failed. Please try again.` });
+      } else {
+        onClose();
+      }
     } catch (error) {
-      RateLimiter.recordAttempt();
-      
-      if (error instanceof AuthError) {
-        setErrors({ general: error.message });
-      } else {
-        setErrors({ general: `${provider} login failed. Please try again.` });
-      }
+      console.error('Social login error:', error);
+      setErrors({ general: `${provider} login failed. Please try again.` });
     } finally {
       setIsLoading(false);
     }
   };
-
-  const remainingAttempts = RateLimiter.getRemainingAttempts();
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -136,38 +97,29 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         </div>
       )}
 
-      {/* Rate Limit Warning */}
-      {remainingAttempts <= 2 && remainingAttempts > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <p className="text-yellow-700 text-sm">
-            Warning: {remainingAttempts} login attempts remaining before temporary lockout.
-          </p>
-        </div>
-      )}
-
       {/* Email Field */}
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-          Email Address
+        <label htmlFor="emailOrUsername" className="block text-sm font-medium text-gray-700 mb-2">
+          Email or Username
         </label>
         <div className="relative">
           <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
-            type="email"
-            id="email"
-            name="email"
-            value={formData.email}
+            type="text"
+            id="emailOrUsername"
+            name="emailOrUsername"
+            value={formData.emailOrUsername}
             onChange={handleInputChange}
             className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-              errors.email ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              errors.emailOrUsername ? 'border-red-300 bg-red-50' : 'border-gray-300'
             }`}
-            placeholder="Enter your email"
-            disabled={isLoading || isBlocked}
-            autoComplete="email"
+            placeholder="Enter your email or username"
+            disabled={isLoading}
+            autoComplete="username"
           />
         </div>
-        {errors.email && (
-          <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+        {errors.emailOrUsername && (
+          <p className="mt-1 text-sm text-red-600">{errors.emailOrUsername}</p>
         )}
       </div>
 
@@ -188,14 +140,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({
               errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
             }`}
             placeholder="Enter your password"
-            disabled={isLoading || isBlocked}
+            disabled={isLoading}
             autoComplete="current-password"
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
             className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            disabled={isLoading || isBlocked}
+            disabled={isLoading}
           >
             {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
           </button>
@@ -207,22 +159,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 
       {/* Remember Me & Forgot Password */}
       <div className="flex items-center justify-between">
-        <label className="flex items-center">
-          <input
-            type="checkbox"
-            name="rememberMe"
-            checked={formData.rememberMe}
-            onChange={handleInputChange}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            disabled={isLoading || isBlocked}
-          />
-          <span className="ml-2 text-sm text-gray-600">Remember me</span>
-        </label>
+        <div></div>
         <button
           type="button"
           onClick={onForgotPassword}
           className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-          disabled={isLoading || isBlocked}
+          disabled={isLoading}
         >
           Forgot password?
         </button>
@@ -231,7 +173,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       {/* Submit Button */}
       <button
         type="submit"
-        disabled={isLoading || isBlocked}
+        disabled={isLoading}
         className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isLoading ? (
@@ -258,7 +200,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         <button
           type="button"
           onClick={() => handleSocialLogin('google')}
-          disabled={isLoading || isBlocked}
+          disabled={isLoading}
           className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -272,7 +214,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         <button
           type="button"
           onClick={() => handleSocialLogin('github')}
-          disabled={isLoading || isBlocked}
+          disabled={isLoading}
           className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Github className="w-5 h-5 mr-2" />
@@ -288,7 +230,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             type="button"
             onClick={onSwitchToSignup}
             className="text-blue-600 hover:text-blue-700 font-medium"
-            disabled={isLoading || isBlocked}
+            disabled={isLoading}
           >
             Sign up
           </button>

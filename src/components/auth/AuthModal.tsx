@@ -65,14 +65,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setCurrentView('success');
     setTimeout(() => {
       handleClose();
-    }, 3000); // Fixed timeout duration
+    }, 2000); // Shorter timeout
   };
 
   const handleForgotPasswordSuccess = () => {
     setCurrentView('success');
     setTimeout(() => {
       handleClose();
-    }, 5000); // Longer timeout for password reset
+    }, 3000); // Reasonable timeout for password reset
   };
 
   const getTitle = () => {
