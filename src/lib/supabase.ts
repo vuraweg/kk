@@ -267,6 +267,56 @@ export interface Database {
           updated_at?: string | null;
         };
       };
+      user_profiles: {
+        Row: {
+          id: string;
+          username: string | null;
+          full_name: string;
+          email_address: string;
+          is_active: boolean;
+          profile_created_at: string | null;
+          profile_updated_at: string | null;
+          user_id: string | null;
+          role: string;
+          phone: string | null;
+          linkedin_profile: string | null;
+          wellfound_profile: string | null;
+          program_start_date: string | null;
+          program_end_date: string | null;
+        };
+        Insert: {
+          id: string;
+          username?: string | null;
+          full_name: string;
+          email_address: string;
+          is_active?: boolean;
+          profile_created_at?: string | null;
+          profile_updated_at?: string | null;
+          user_id?: string | null;
+          role?: string;
+          phone?: string | null;
+          linkedin_profile?: string | null;
+          wellfound_profile?: string | null;
+          program_start_date?: string | null;
+          program_end_date?: string | null;
+        };
+        Update: {
+          id?: string;
+          username?: string | null;
+          full_name?: string;
+          email_address?: string;
+          is_active?: boolean;
+          profile_created_at?: string | null;
+          profile_updated_at?: string | null;
+          user_id?: string | null;
+          role?: string;
+          phone?: string | null;
+          linkedin_profile?: string | null;
+          wellfound_profile?: string | null;
+          program_start_date?: string | null;
+          program_end_date?: string | null;
+        };
+      };
     };
   };
 }
