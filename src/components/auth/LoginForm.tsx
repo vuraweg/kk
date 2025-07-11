@@ -73,16 +73,21 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     setErrors({});
 
     try {
-      const { error } = await signInWithGoogle();
-      
-      if (error) {
-        setErrors({ general: error.message || `${provider} login failed. Please try again.` });
+      if (provider === 'google') {
+        const { error } = await signInWithGoogle();
+        
+        if (error) {
+          setErrors({ general: error.message || 'Google login failed. Please try again.' });
+        } else {
+          onClose();
+        }
       } else {
-        onClose();
+        // GitHub login not implemented yet
+        setErrors({ general: 'GitHub login is not available yet. Please use Google or email/password.' });
       }
     } catch (error) {
       console.error('Social login error:', error);
-      setErrors({ general: `${provider} login failed. Please try again.` });
+      setErrors({ general: 'Social login failed. Please try again.' });
     } finally {
       setIsLoading(false);
     }

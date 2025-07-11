@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
+import { googleAuth } from '../lib/googleAuth';
 
 interface User {
   id: string;
@@ -9,7 +10,9 @@ interface User {
   fullName: string;
   avatar_url?: string;
   isAdmin?: boolean;
-  provider?: 'email' | 'google';
+  provider?: 'email' | 'google' | 'phone';
+  name?: string;
+  phone?: string;
 }
 
 interface AuthContextType {
@@ -143,7 +146,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       // Check if user is admin based on email
-      const adminEmails = ['admin@primojobs.com', 'admin@example.com'];
+      const adminEmails = ['admin@primojobs.com', 'admin@example.com', 'virat52418@gmail.com'];
       const isAdmin = adminEmails.includes(supabaseUser.email || '');
 
       const userProfile: User = {
@@ -151,7 +154,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email: supabaseUser.email || '',
         username: profile?.username || supabaseUser.user_metadata?.username || 'user',
         fullName: profile?.full_name || supabaseUser.user_metadata?.full_name || 'User',
+        name: profile?.full_name || supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || 'User',
         avatar_url: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
+        phone: profile?.phone || supabaseUser.user_metadata?.phone,
         isAdmin,
         provider: supabaseUser.app_metadata?.provider || 'email'
       };
@@ -164,6 +169,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email: supabaseUser.email || '',
         username: 'user',
         fullName: 'User',
+        name: 'User',
         isAdmin: false,
         provider: 'email'
       });
@@ -274,14 +280,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({ 
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/login`
+    try {
+      console.log('Starting Google sign-in...');
+      
+      // Use Google Identity Services for sign-in
+      const googleUser = await googleAuth.signInWithGoogle();
+      console.log('Google user data:', googleUser);
+      
+      // Sign in with Supabase using the Google user data
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        }
+      });
+      
+      if (error) {
+        console.error('Supabase Google sign-in error:', error);
+        return { error };
       }
-    });
-    if (error) console.error('Google sign in error:', error);
-    return { error };
+      
+      console.log('Google sign-in successful');
+      return { error: null };
+      
+    } catch (error) {
+      console.error('Google sign-in failed:', error);
+      return { error: { message: error.message || 'Google sign-in failed' } };
+    }
   };
 
   const signOut = async () => {

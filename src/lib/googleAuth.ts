@@ -15,7 +15,7 @@ export interface GoogleUser {
 }
 
 class GoogleAuthService {
-  private clientId = '688195257967-r2n6l9fauav7dv29bkk1jrlqdq4e75m3.apps.googleusercontent.com';
+  private clientId = '688195257967-5o595i8j7de6oesi6s5bdv41j19id560.apps.googleusercontent.com';
   private isInitialized = false;
 
   async initialize(): Promise<void> {

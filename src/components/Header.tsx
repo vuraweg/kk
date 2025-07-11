@@ -18,6 +18,11 @@ const Header: React.FC = () => {
       return user.name;
     }
     
+    // If user has fullName, use it
+    if (user.fullName && user.fullName.trim() && user.fullName !== 'User') {
+      return user.fullName;
+    }
+    
     // Fallback to phone number (last 4 digits)
     if (user.phone) {
       const phoneDigits = user.phone.replace(/\D/g, '');

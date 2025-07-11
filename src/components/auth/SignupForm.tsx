@@ -105,16 +105,21 @@ export const SignupForm: React.FC<SignupFormProps> = ({
     setErrors({});
 
     try {
-      const { error } = await signInWithGoogle();
-      
-      if (error) {
-        setErrors({ general: error.message || `${provider} signup failed. Please try again.` });
+      if (provider === 'google') {
+        const { error } = await signInWithGoogle();
+        
+        if (error) {
+          setErrors({ general: error.message || 'Google signup failed. Please try again.' });
+        } else {
+          onSignupSuccess();
+        }
       } else {
-        onSignupSuccess();
+        // GitHub signup not implemented yet
+        setErrors({ general: 'GitHub signup is not available yet. Please use Google or email/password.' });
       }
     } catch (error) {
       console.error('Social signup error:', error);
-      setErrors({ general: `${provider} signup failed. Please try again.` });
+      setErrors({ general: 'Social signup failed. Please try again.' });
     } finally {
       setIsLoading(false);
     }
