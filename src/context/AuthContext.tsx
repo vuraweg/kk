@@ -136,9 +136,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .from('user_profiles')
         .select('*')
         .eq('id', supabaseUser.id)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
+      if (error) {
         throw error;
       }
 
@@ -180,10 +180,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .from('user_profiles')
         .select('username')
         .eq('username', username)
-        .single();
+        .maybeSingle();
 
-      // If there's an error other than "not found", handle it
-      if (usernameCheckError && usernameCheckError.code !== 'PGRST116') {
+      // If there's any error from maybeSingle, handle it
+      if (usernameCheckError) {
         console.error('Username check error:', usernameCheckError);
         return { error: { message: 'Unable to verify username availability. Please try again.' } };
       }
@@ -216,7 +216,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             id: data.user.id,
             email_address: email,
             username,
-            username,
             full_name: fullName,
             role: 'client'
           });
@@ -243,9 +242,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .from('user_profiles')
           .select('email_address')
           .eq('username', emailOrUsername)
-          .single();
+          .maybeSingle();
 
-        if (profileError && profileError.code !== 'PGRST116') {
+        if (profileError) {
           console.error('Profile lookup error:', profileError);
           return { error: { message: 'Unable to find user. Please try again.' } };
         }
